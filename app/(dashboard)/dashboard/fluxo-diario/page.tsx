@@ -47,6 +47,7 @@ export default function FluxoDiarioPage() {
   const [typeFilter, setTypeFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [searchFilter, setSearchFilter] = useState('');
+  const [includeHidden, setIncludeHidden] = useState(false);
 
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
@@ -54,6 +55,7 @@ export default function FluxoDiarioPage() {
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [savingCategoryFor, setSavingCategoryFor] = useState<string | null>(null);
+  const [savingHiddenFor, setSavingHiddenFor] = useState<string | null>(null);
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -76,7 +78,8 @@ export default function FluxoDiarioPage() {
       endDate,
       type: typeFilter,
       category: categoryFilter,
-      search: searchFilter
+      search: searchFilter,
+      includeHidden: includeHidden ? 'true' : 'false'
     });
 
     const response = await fetch(`/api/reports/daily?${params.toString()}`, {
@@ -108,7 +111,7 @@ export default function FluxoDiarioPage() {
     });
 
     return () => controller.abort();
-  }, [startDate, endDate, typeFilter, categoryFilter, searchFilter]);
+  }, [startDate, endDate, typeFilter, categoryFilter, searchFilter, includeHidden]);
 
   useEffect(() => {
     loadCategories().catch(() => setCategories([]));
@@ -138,6 +141,25 @@ export default function FluxoDiarioPage() {
 
     await loadDailyReport();
     setSavingCategoryFor(null);
+  }
+
+  async function handleTransactionHiddenChange(transactionId: string, isHidden: boolean) {
+    setSavingHiddenFor(transactionId);
+
+    const response = await fetch(`/api/transactions/${transactionId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_hidden: isHidden })
+    });
+
+    if (!response.ok) {
+      setError('Falha ao atualizar status da transacao.');
+      setSavingHiddenFor(null);
+      return;
+    }
+
+    await loadDailyReport();
+    setSavingHiddenFor(null);
   }
 
   async function createQuickCategory() {
@@ -229,12 +251,23 @@ export default function FluxoDiarioPage() {
               setTypeFilter('all');
               setCategoryFilter('');
               setSearchFilter('');
+              setIncludeHidden(false);
               setSelectedDate(null);
             }}
           >
             Voltar para mes atual
           </Button>
+          <label className="inline-flex items-center gap-2 rounded-lg border border-app-border bg-white px-3 py-2 text-sm">
+            <input
+              type="checkbox"
+              checked={includeHidden}
+              onChange={(event) => setIncludeHidden(event.target.checked)}
+              aria-label="Mostrar lancamentos desabilitados"
+            />
+            Mostrar desabilitados
+          </label>
         </div>
+        <p className="mt-2 text-xs text-app-subtle">Lancamentos desabilitados nao entram nos totais e graficos do periodo.</p>
       </Card>
 
       <Card className="mb-6">
@@ -284,11 +317,15 @@ export default function FluxoDiarioPage() {
         <h3 className="mb-4 text-lg font-semibold">{listTitle}</h3>
         <div className="space-y-2">
           {displayedTransactions.map((transaction) => (
-            <div key={transaction.id} className={savingCategoryFor === transaction.id ? 'opacity-60' : ''}>
+            <div
+              key={transaction.id}
+              className={savingCategoryFor === transaction.id || savingHiddenFor === transaction.id ? 'opacity-60' : ''}
+            >
               <TransactionRow
                 transaction={transaction}
                 editableCategories={categories.map((category) => ({ id: category.id, name: category.name }))}
                 onCategoryChange={handleTransactionCategoryChange}
+                onHiddenChange={handleTransactionHiddenChange}
               />
             </div>
           ))}

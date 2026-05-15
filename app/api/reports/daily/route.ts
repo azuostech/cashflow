@@ -24,6 +24,7 @@ interface TransactionItem {
   type: 'credit' | 'debit';
   amount: number;
   balance_after: number | null;
+  is_hidden: boolean;
   category_id: string | null;
   categories: Category | null;
 }
@@ -48,6 +49,11 @@ function parseDateParam(value: string | null, fallback: string): string {
   return value;
 }
 
+function parseBooleanParam(value: string | null, fallback = false): boolean {
+  if (!value) return fallback;
+  return value.toLowerCase() === 'true';
+}
+
 export async function GET(request: Request) {
   const session = await getSessionContext();
   if (!session) return jsonError('Nao autenticado.', 401);
@@ -65,6 +71,7 @@ export async function GET(request: Request) {
   const type = searchParams.get('type') ?? 'all';
   const category = searchParams.get('category') ?? '';
   const search = (searchParams.get('search') ?? '').trim().toLowerCase();
+  const includeHidden = parseBooleanParam(searchParams.get('includeHidden'));
 
   let accountId = searchParams.get('accountId');
 
@@ -119,14 +126,19 @@ export async function GET(request: Request) {
 
   const statementIds = statements.map((statement) => statement.id);
 
-  const { data: transactions, error } = await supabase
+  let query = supabase
     .from('transactions')
-    .select('id, date, description, type, amount, balance_after, category_id, categories(name,color)')
+    .select('id, date, description, type, amount, balance_after, is_hidden, category_id, categories(name,color)')
     .in('statement_id', statementIds)
-    .eq('is_hidden', false)
     .gte('date', startDate)
     .lte('date', endDate)
     .order('date', { ascending: false });
+
+  if (!includeHidden) {
+    query = query.eq('is_hidden', false);
+  }
+
+  const { data: transactions, error } = await query;
 
   if (error) return jsonError(error.message, 500);
 
@@ -137,6 +149,7 @@ export async function GET(request: Request) {
     type: transaction.type,
     amount: Number(transaction.amount),
     balance_after: transaction.balance_after === null ? null : Number(transaction.balance_after),
+    is_hidden: Boolean(transaction.is_hidden),
     category_id: transaction.category_id,
     categories: normalizeCategory(transaction.categories)
   }));
@@ -155,14 +168,16 @@ export async function GET(request: Request) {
     filteredTransactions = filteredTransactions.filter((transaction) => transaction.description.toLowerCase().includes(search));
   }
 
-  const totalIn = filteredTransactions
+  const visibleTransactions = filteredTransactions.filter((transaction) => !transaction.is_hidden);
+
+  const totalIn = visibleTransactions
     .filter((transaction) => transaction.type === 'credit')
     .reduce((sum, transaction) => sum + Number(transaction.amount), 0);
-  const totalOut = filteredTransactions
+  const totalOut = visibleTransactions
     .filter((transaction) => transaction.type === 'debit')
     .reduce((sum, transaction) => sum + Number(transaction.amount), 0);
 
-  const sortedAsc = [...allTransactions].sort((a, b) => a.date.localeCompare(b.date));
+  const sortedAsc = [...visibleTransactions].sort((a, b) => a.date.localeCompare(b.date));
   const firstTx = sortedAsc[0];
   const lastTx = sortedAsc[sortedAsc.length - 1];
 
@@ -181,7 +196,7 @@ export async function GET(request: Request) {
 
   const dailyMap = new Map<string, DailyPoint>();
 
-  for (const transaction of filteredTransactions) {
+  for (const transaction of visibleTransactions) {
     const existing = dailyMap.get(transaction.date) ?? {
       date: transaction.date,
       total_in: 0,
