@@ -4,15 +4,31 @@ import { createClient } from '@/lib/supabase/server';
 export async function getFirstAccount(companyId: string) {
   const supabase = createClient();
 
-  const { data } = await supabase
+  const { data: latestStatement } = await supabase
+    .from('statements')
+    .select('account_id, bank_accounts!inner(id, bank_name, agency, account_number, company_id)')
+    .eq('bank_accounts.company_id', companyId)
+    .order('uploaded_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (latestStatement?.bank_accounts) {
+    const account = Array.isArray(latestStatement.bank_accounts)
+      ? latestStatement.bank_accounts[0]
+      : latestStatement.bank_accounts;
+
+    if (account) return account;
+  }
+
+  const { data: fallbackAccount } = await supabase
     .from('bank_accounts')
     .select('id, bank_name, agency, account_number, company_id')
     .eq('company_id', companyId)
     .order('created_at', { ascending: true })
     .limit(1)
-    .single();
+    .maybeSingle();
 
-  return data;
+  return fallbackAccount;
 }
 
 export async function getCompanyAccounts(companyId: string) {

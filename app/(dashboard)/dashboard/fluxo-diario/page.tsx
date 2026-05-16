@@ -33,6 +33,11 @@ interface CategoryOption {
   type: 'income' | 'expense';
 }
 
+interface StatementSummary {
+  period_start: string;
+  period_end: string;
+}
+
 const categoryColors = ['#E24B4A', '#639922', '#D85A30', '#BA7517', '#378ADD', '#993556', '#1D9E75'];
 
 function formatPtDate(date: string): string {
@@ -115,6 +120,23 @@ export default function FluxoDiarioPage() {
 
   useEffect(() => {
     loadCategories().catch(() => setCategories([]));
+  }, []);
+
+  useEffect(() => {
+    async function loadLatestStatementPeriod() {
+      const response = await fetch('/api/statements/list', { cache: 'no-store' });
+      const payload = await response.json().catch(() => null);
+
+      const statements = Array.isArray(payload?.statements) ? (payload.statements as StatementSummary[]) : [];
+      const latest = statements[0];
+
+      if (latest?.period_start && latest?.period_end) {
+        setStartDate(latest.period_start);
+        setEndDate(latest.period_end);
+      }
+    }
+
+    loadLatestStatementPeriod().catch(() => null);
   }, []);
 
   useEffect(() => {

@@ -25,6 +25,11 @@ interface DashboardData {
   };
 }
 
+interface StatementSummary {
+  period_start: string;
+  period_end: string;
+}
+
 export default function DashboardPage() {
   const defaultRange = monthRange(currentMonth());
 
@@ -33,6 +38,23 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<DashboardData | null>(null);
+
+  useEffect(() => {
+    async function loadLatestStatementPeriod() {
+      const response = await fetch('/api/statements/list', { cache: 'no-store' });
+      const payload = await response.json().catch(() => null);
+
+      const statements = Array.isArray(payload?.statements) ? (payload.statements as StatementSummary[]) : [];
+      const latest = statements[0];
+
+      if (latest?.period_start && latest?.period_end) {
+        setStartDate(latest.period_start);
+        setEndDate(latest.period_end);
+      }
+    }
+
+    loadLatestStatementPeriod().catch(() => null);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
