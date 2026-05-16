@@ -57,6 +57,7 @@ function parseBooleanParam(value: string | null, fallback = false): boolean {
 export async function GET(request: Request) {
   const session = await getSessionContext();
   if (!session) return jsonError('Nao autenticado.', 401);
+  if (!session.companyId) return jsonError('Selecione uma empresa para continuar.', 400);
 
   const { searchParams } = new URL(request.url);
 
@@ -97,6 +98,17 @@ export async function GET(request: Request) {
   }
 
   const supabase = createClient();
+
+  const { data: scopedAccount } = await supabase
+    .from('bank_accounts')
+    .select('id')
+    .eq('id', accountId)
+    .eq('company_id', session.companyId)
+    .maybeSingle();
+
+  if (!scopedAccount) {
+    return jsonError('Conta bancaria fora da empresa selecionada.', 403);
+  }
 
   const { data: statements, error: statementsError } = await supabase
     .from('statements')

@@ -19,6 +19,7 @@ interface Params {
 export async function GET(_: Request, { params }: Params) {
   const session = await getSessionContext();
   if (!session) return jsonError('Nao autenticado.', 401);
+  if (!session.companyId) return jsonError('Selecione uma empresa para continuar.', 400);
 
   const supabase = createClient();
   const { data, error } = await supabase
@@ -36,6 +37,7 @@ export async function GET(_: Request, { params }: Params) {
 export async function PATCH(request: Request, { params }: Params) {
   const session = await getSessionContext();
   if (!session) return jsonError('Nao autenticado.', 401);
+  if (!session.companyId) return jsonError('Selecione uma empresa para continuar.', 400);
 
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success) {
@@ -59,6 +61,7 @@ export async function PATCH(request: Request, { params }: Params) {
 export async function DELETE(_: Request, { params }: Params) {
   const session = await getSessionContext();
   if (!session) return jsonError('Nao autenticado.', 401);
+  if (!session.companyId) return jsonError('Selecione uma empresa para continuar.', 400);
 
   const supabase = createClient();
   const { error } = await supabase.from('categories').delete().eq('id', params.id).eq('company_id', session.companyId);

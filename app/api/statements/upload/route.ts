@@ -7,6 +7,7 @@ import { jsonError, jsonOk } from '@/lib/utils/http';
 export async function POST(request: Request) {
   const session = await getSessionContext();
   if (!session) return jsonError('Nao autenticado.', 401);
+  if (!session.companyId) return jsonError('Selecione uma empresa para continuar.', 400);
 
   const formData = await request.formData();
   const file = formData.get('file') as File | null;

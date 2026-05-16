@@ -6,6 +6,7 @@ import { jsonError, jsonOk } from '@/lib/utils/http';
 export async function POST(request: Request) {
   const session = await getSessionContext();
   if (!session) return jsonError('Nao autenticado.', 401);
+  if (!session.companyId) return jsonError('Selecione uma empresa para continuar.', 400);
 
   const { statementId } = await request.json();
   if (!statementId) return jsonError('statementId obrigatorio.', 400);

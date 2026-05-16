@@ -29,30 +29,50 @@ export interface Database {
       users: {
         Row: {
           id: string;
-          company_id: string;
+          company_id: string | null;
           email: string;
           password_hash: string | null;
           full_name: string | null;
+          role: 'admin' | 'consultor' | 'cliente';
           created_at: string | null;
           last_login: string | null;
         };
         Insert: {
           id: string;
-          company_id: string;
+          company_id?: string | null;
           email: string;
           password_hash?: string | null;
           full_name?: string | null;
+          role?: 'admin' | 'consultor' | 'cliente';
           created_at?: string | null;
           last_login?: string | null;
         };
         Update: {
           id?: string;
-          company_id?: string;
+          company_id?: string | null;
           email?: string;
           password_hash?: string | null;
           full_name?: string | null;
+          role?: 'admin' | 'consultor' | 'cliente';
           created_at?: string | null;
           last_login?: string | null;
+        };
+      };
+      user_company_access: {
+        Row: {
+          user_id: string;
+          company_id: string;
+          created_at: string | null;
+        };
+        Insert: {
+          user_id: string;
+          company_id: string;
+          created_at?: string | null;
+        };
+        Update: {
+          user_id?: string;
+          company_id?: string;
+          created_at?: string | null;
         };
       };
       bank_accounts: {

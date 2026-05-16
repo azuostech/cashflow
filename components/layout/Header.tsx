@@ -2,14 +2,13 @@
 
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { createClient } from '@/lib/supabase/client';
+import { SessionControls } from '@/components/layout/SessionControls';
 
 export function Header({ title, subtitle }: { title: string; subtitle?: string }) {
   const router = useRouter();
 
   async function logout() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
+    await fetch('/api/auth/logout', { method: 'POST' });
     router.push('/login');
     router.refresh();
   }
@@ -20,9 +19,12 @@ export function Header({ title, subtitle }: { title: string; subtitle?: string }
         <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
         {subtitle ? <p className="text-sm text-app-subtle">{subtitle}</p> : null}
       </div>
-      <Button variant="outline" onClick={logout}>
-        Sair
-      </Button>
+      <div className="flex w-full flex-col items-stretch gap-2 md:w-auto md:items-end">
+        <SessionControls />
+        <Button variant="outline" onClick={logout}>
+          Sair
+        </Button>
+      </div>
     </header>
   );
 }

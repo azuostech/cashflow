@@ -13,6 +13,7 @@ const schema = z.object({
 export async function GET() {
   const session = await getSessionContext();
   if (!session) return jsonError('Nao autenticado.', 401);
+  if (!session.companyId) return jsonError('Selecione uma empresa para continuar.', 400);
 
   const supabase = createClient();
   const { data, error } = await supabase
@@ -29,6 +30,7 @@ export async function GET() {
 export async function POST(request: Request) {
   const session = await getSessionContext();
   if (!session) return jsonError('Nao autenticado.', 401);
+  if (!session.companyId) return jsonError('Selecione uma empresa para continuar.', 400);
 
   const body = await request.json();
   const parsed = schema.safeParse(body);

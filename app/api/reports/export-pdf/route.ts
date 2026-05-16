@@ -9,6 +9,7 @@ import { jsonError } from '@/lib/utils/http';
 export async function POST(request: Request) {
   const session = await getSessionContext();
   if (!session) return jsonError('Nao autenticado.', 401);
+  if (!session.companyId) return jsonError('Selecione uma empresa para continuar.', 400);
 
   const payload = await request.json().catch(() => ({}));
   const month = typeof payload.month === 'string' ? payload.month : currentMonth();
@@ -21,10 +22,21 @@ export async function POST(request: Request) {
 
   if (!accountId) return jsonError('Nenhuma conta encontrada.', 404);
 
-  const statement = await getStatementForMonth(accountId, month);
+  const supabase = createClient();
+  const { data: scopedAccount } = await supabase
+    .from('bank_accounts')
+    .select('id')
+    .eq('id', accountId)
+    .eq('company_id', session.companyId)
+    .maybeSingle();
+
+  if (!scopedAccount) {
+    return jsonError('Conta bancaria fora da empresa selecionada.', 403);
+  }
+
+  const statement = await getStatementForMonth(accountId, month, session.companyId);
   if (!statement) return jsonError('Nao ha dados para o periodo selecionado.', 404);
 
-  const supabase = createClient();
   const { data: dailyData } = await supabase.rpc('get_daily_balance', {
     p_statement_id: statement.id
   });

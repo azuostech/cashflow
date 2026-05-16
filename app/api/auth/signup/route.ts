@@ -53,7 +53,7 @@ export async function POST(request: Request) {
       email_confirm: true,
       user_metadata: {
         company_id: company.id,
-        role: 'admin'
+        role: 'cliente'
       }
     });
 
@@ -66,6 +66,7 @@ export async function POST(request: Request) {
       id: authUser.user.id,
       company_id: company.id,
       email,
+      role: 'cliente',
       password_hash: '',
       full_name: email.split('@')[0]
     });
