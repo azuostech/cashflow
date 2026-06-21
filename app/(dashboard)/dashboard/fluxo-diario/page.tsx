@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { currentMonth, monthRange } from '@/lib/utils/date';
+import { formatDateBR } from '@/lib/utils/format';
 
 interface DailyReportData {
   initialBalance: number;
@@ -41,7 +42,7 @@ interface StatementSummary {
 const categoryColors = ['#E24B4A', '#639922', '#D85A30', '#BA7517', '#378ADD', '#993556', '#1D9E75'];
 
 function formatPtDate(date: string): string {
-  return new Date(`${date}T00:00:00`).toLocaleDateString('pt-BR');
+  return formatDateBR(date);
 }
 
 export default function FluxoDiarioPage() {

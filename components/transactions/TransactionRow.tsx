@@ -1,6 +1,6 @@
 import { CategoryBadge } from '@/components/transactions/CategoryBadge';
 import { Button } from '@/components/ui/button';
-import { formatCurrency } from '@/lib/utils/format';
+import { formatCurrency, formatDateBR } from '@/lib/utils/format';
 
 export interface TransactionView {
   id: string;
@@ -39,7 +39,7 @@ export function TransactionRow({ transaction, editableCategories, onCategoryChan
         isHidden ? 'bg-app-muted/40 opacity-80' : ''
       }`}
     >
-      <p className="text-sm text-app-subtle">{new Date(transaction.date).toLocaleDateString('pt-BR')}</p>
+      <p className="text-sm text-app-subtle">{formatDateBR(transaction.date)}</p>
       <p className={`md:col-span-2 ${isHidden ? 'line-through text-app-subtle' : ''}`}>{transaction.description}</p>
       {editableCategories && onCategoryChange ? (
         <select

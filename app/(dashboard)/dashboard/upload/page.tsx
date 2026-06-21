@@ -7,6 +7,7 @@ import { UploadPreview } from '@/components/upload/UploadPreview';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
+import { formatDateBR } from '@/lib/utils/format';
 
 interface Account {
   id: string;
@@ -47,7 +48,7 @@ function toPtDateTime(value: string | null): string {
 }
 
 function toPtDate(value: string): string {
-  return new Date(value).toLocaleDateString('pt-BR');
+  return formatDateBR(value);
 }
 
 export default function UploadPage() {
