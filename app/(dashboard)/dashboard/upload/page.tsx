@@ -33,6 +33,10 @@ interface Statement {
   }[];
 }
 
+function getStatementBankAccount(statement: Statement) {
+  return Array.isArray(statement.bank_accounts) ? statement.bank_accounts[0] : statement.bank_accounts;
+}
+
 function toPtDateTime(value: string | null): string {
   if (!value) return '-';
 
@@ -50,6 +54,7 @@ export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [statements, setStatements] = useState<Statement[]>([]);
+  const [selectedBank, setSelectedBank] = useState<string>('');
   const [selectedAccount, setSelectedAccount] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [deletingStatementId, setDeletingStatementId] = useState<string | null>(null);
@@ -64,11 +69,7 @@ export default function UploadPage() {
 
     setAccounts(accountsData);
     setStatements(statementsData);
-
-    if (!selectedAccount && accountsData[0]?.id) {
-      setSelectedAccount(accountsData[0].id);
-    }
-  }, [selectedAccount]);
+  }, []);
 
   useEffect(() => {
     loadData().catch(() => {
@@ -76,6 +77,36 @@ export default function UploadPage() {
       setStatements([]);
     });
   }, [loadData]);
+
+  const bankOptions = useMemo(() => {
+    return Array.from(new Set(accounts.map((account) => account.bank_name).filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b, 'pt-BR')
+    );
+  }, [accounts]);
+
+  const filteredAccounts = useMemo(() => {
+    if (!selectedBank) return accounts;
+    return accounts.filter((account) => account.bank_name === selectedBank);
+  }, [accounts, selectedBank]);
+
+  useEffect(() => {
+    if (accounts.length === 0) {
+      setSelectedBank('');
+      setSelectedAccount('');
+      return;
+    }
+
+    const nextBank = selectedBank && bankOptions.includes(selectedBank) ? selectedBank : bankOptions[0] ?? '';
+    if (nextBank !== selectedBank) {
+      setSelectedBank(nextBank);
+      return;
+    }
+
+    const selectedAccountStillVisible = filteredAccounts.some((account) => account.id === selectedAccount);
+    if (!selectedAccountStillVisible) {
+      setSelectedAccount(filteredAccounts[0]?.id ?? '');
+    }
+  }, [accounts, bankOptions, filteredAccounts, selectedAccount, selectedBank]);
 
   async function upload() {
     if (!file || !selectedAccount) return;
@@ -100,7 +131,11 @@ export default function UploadPage() {
       return;
     }
 
-    setResult(`Upload concluido: ${data.transactionsCount} transacoes processadas.`);
+    const warnings = Array.isArray(data.warnings) ? data.warnings.filter(Boolean) : [];
+    const detectedBank = data.bank?.bankName ? ` Banco detectado: ${data.bank.bankName}.` : '';
+    const warningText = warnings.length ? ` Atencao: ${warnings.join(' ')}` : '';
+
+    setResult(`Upload concluido: ${data.transactionsCount} transacoes processadas.${detectedBank}${warningText}`);
     setFile(null);
     setLoading(false);
     await loadData();
@@ -130,9 +165,14 @@ export default function UploadPage() {
   }
 
   const visibleStatements = useMemo(() => {
-    if (!selectedAccount) return statements;
-    return statements.filter((statement) => statement.account_id === selectedAccount);
-  }, [selectedAccount, statements]);
+    return statements.filter((statement) => {
+      const bankAccount = getStatementBankAccount(statement);
+
+      if (selectedAccount) return statement.account_id === selectedAccount;
+      if (selectedBank) return bankAccount?.bank_name === selectedBank;
+      return true;
+    });
+  }, [selectedAccount, selectedBank, statements]);
 
   return (
     <section>
@@ -140,9 +180,24 @@ export default function UploadPage() {
 
       <Card>
         <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+          <Select
+            value={selectedBank}
+            onChange={(event) => {
+              setSelectedBank(event.target.value);
+              setSelectedAccount('');
+            }}
+          >
+            <option value="">Selecione o banco</option>
+            {bankOptions.map((bank) => (
+              <option key={bank} value={bank}>
+                {bank}
+              </option>
+            ))}
+          </Select>
+
           <Select value={selectedAccount} onChange={(event) => setSelectedAccount(event.target.value)}>
             <option value="">Selecione a conta</option>
-            {accounts.map((account) => (
+            {filteredAccounts.map((account) => (
               <option key={account.id} value={account.id}>
                 {account.bank_name} - {account.agency ?? 's/ag'} / {account.account_number ?? 's/conta'}
               </option>
@@ -169,7 +224,7 @@ export default function UploadPage() {
         <h2 className="mb-3 text-lg font-semibold">Historico de uploads</h2>
         <div className="space-y-3">
           {visibleStatements.map((statement) => {
-            const bankAccount = Array.isArray(statement.bank_accounts) ? statement.bank_accounts[0] : statement.bank_accounts;
+            const bankAccount = getStatementBankAccount(statement);
 
             return (
               <div key={statement.id} className="rounded-lg border border-app-border p-4">

@@ -12,6 +12,8 @@ export interface ParsedStatement {
   periodEnd: string;
   initialBalance: number;
   finalBalance: number;
+  bank: ParsedBankInfo;
+  warnings: string[];
   transactions: ParsedTransaction[];
 }
 
@@ -26,16 +28,64 @@ interface RawTransaction {
   signedAmount: number;
 }
 
+export interface ParsedBankInfo {
+  bankId: string | null;
+  bankName: string | null;
+  bankKey: string | null;
+  accountId: string | null;
+  accountType: string | null;
+}
+
+interface ParseOFXOptions {
+  expectedBankName?: string | null;
+  expectedAccountNumber?: string | null;
+}
+
+const BANKS_BY_CODE: Record<string, { key: string; name: string }> = {
+  '1': { key: 'banco-do-brasil', name: 'Banco do Brasil' },
+  '33': { key: 'santander', name: 'Santander' },
+  '77': { key: 'inter', name: 'Inter' },
+  '104': { key: 'caixa', name: 'Caixa' },
+  '237': { key: 'bradesco', name: 'Bradesco' },
+  '260': { key: 'nubank', name: 'Nubank' },
+  '341': { key: 'itau', name: 'Itau' },
+  '748': { key: 'sicredi', name: 'Sicredi' }
+};
+
 function extractTagValue(content: string, tag: string): string | null {
   const regex = new RegExp(`<${tag}>([^<\\r\\n]*)`, 'i');
   const match = content.match(regex);
   return match?.[1]?.trim() || null;
 }
 
+function countReplacementCharacters(content: string): number {
+  return content.match(/\uFFFD/g)?.length ?? 0;
+}
+
+function decodeOfxBuffer(buffer: Buffer): string {
+  const utf8 = buffer.toString('utf8');
+  const latin1 = buffer.toString('latin1');
+
+  return countReplacementCharacters(utf8) <= countReplacementCharacters(latin1) ? utf8 : latin1;
+}
+
 function parseOfxAmount(value: string | null): number | null {
   if (!value) return null;
 
-  const normalized = value.replace(',', '.').trim();
+  const trimmed = value.trim();
+  const hasComma = trimmed.includes(',');
+  const hasDot = trimmed.includes('.');
+  let normalized = trimmed;
+
+  if (hasComma && hasDot) {
+    normalized =
+      trimmed.lastIndexOf(',') > trimmed.lastIndexOf('.')
+        ? trimmed.replace(/\./g, '').replace(',', '.')
+        : trimmed.replace(/,/g, '');
+  } else if (hasComma) {
+    normalized = trimmed.replace(/\./g, '').replace(',', '.');
+  }
+
   const parsed = Number(normalized);
 
   if (!Number.isFinite(parsed)) return null;
@@ -80,13 +130,95 @@ function normalizeDescription(memo: string | null, typeTag: string | null): stri
   return fallback;
 }
 
-export function parseOFX(buffer: Buffer): ParsedStatement {
-  const content = buffer.toString('latin1');
+function normalizeText(value: string | null): string {
+  return (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeBankCode(bankId: string | null): string | null {
+  if (!bankId) return null;
+  const digits = bankId.replace(/\D/g, '').replace(/^0+/, '');
+  return digits || null;
+}
+
+function identifyBankFromName(bankName: string | null): { key: string; name: string } | null {
+  const normalized = normalizeText(bankName);
+
+  if (!normalized) return null;
+  if (normalized.includes('BRADESCO')) return { key: 'bradesco', name: 'Bradesco' };
+  if (normalized.includes('BANCO DO BRASIL') || normalized === 'BB') return { key: 'banco-do-brasil', name: 'Banco do Brasil' };
+  if (normalized.includes('SICREDI') || normalized.includes('SICREED')) return { key: 'sicredi', name: 'Sicredi' };
+  if (normalized.includes('INTER')) return { key: 'inter', name: 'Inter' };
+  if (normalized.includes('NUBANK') || normalized.includes('NU PAGAMENTOS')) return { key: 'nubank', name: 'Nubank' };
+  if (normalized.includes('ITAU')) return { key: 'itau', name: 'Itau' };
+  if (normalized.includes('SANTANDER')) return { key: 'santander', name: 'Santander' };
+  if (normalized.includes('CAIXA')) return { key: 'caixa', name: 'Caixa' };
+
+  return null;
+}
+
+function extractBankInfo(content: string, expectedBankName?: string | null): ParsedBankInfo {
+  const bankId = extractTagValue(content, 'BANKID');
+  const bankByCode = BANKS_BY_CODE[normalizeBankCode(bankId) ?? ''];
+  const bankByName = identifyBankFromName(expectedBankName ?? null);
+
+  return {
+    bankId,
+    bankName: bankByCode?.name ?? bankByName?.name ?? null,
+    bankKey: bankByCode?.key ?? bankByName?.key ?? null,
+    accountId: extractTagValue(content, 'ACCTID'),
+    accountType: extractTagValue(content, 'ACCTTYPE')
+  };
+}
+
+function isBalanceTransaction(memo: string | null): boolean {
+  const normalized = normalizeText(memo);
+
+  return (
+    normalized === 'SALDO ANTERIOR' ||
+    normalized === 'SALDO DO DIA' ||
+    normalized === 'SALDO FINAL' ||
+    normalized === 'SALDO TOTAL DISPONIVEL DIA'
+  );
+}
+
+function normalizeAccountNumber(value: string | null | undefined): string {
+  return (value ?? '').replace(/\D/g, '').replace(/^0+/, '');
+}
+
+function sameAccountNumber(ofxAccountId: string | null, expectedAccountNumber: string | null | undefined): boolean {
+  const ofx = normalizeAccountNumber(ofxAccountId);
+  const expected = normalizeAccountNumber(expectedAccountNumber);
+
+  if (!ofx || !expected) return true;
+  return ofx === expected || ofx.endsWith(expected) || expected.endsWith(ofx);
+}
+
+function buildWarnings(bank: ParsedBankInfo, options: ParseOFXOptions): string[] {
+  const warnings: string[] = [];
+  const expectedBank = identifyBankFromName(options.expectedBankName ?? null);
+
+  if (expectedBank && bank.bankKey && expectedBank.key !== bank.bankKey) {
+    warnings.push(`Banco detectado no OFX: ${bank.bankName ?? bank.bankId}. Conta selecionada: ${options.expectedBankName}.`);
+  }
+
+  if (!sameAccountNumber(bank.accountId, options.expectedAccountNumber)) {
+    warnings.push(`Conta detectada no OFX: ${bank.accountId}. Conta selecionada: ${options.expectedAccountNumber}.`);
+  }
+
+  return warnings;
+}
+
+export function parseOFX(buffer: Buffer, options: ParseOFXOptions = {}): ParsedStatement {
+  const content = decodeOfxBuffer(buffer);
+  const bank = extractBankInfo(content, options.expectedBankName);
 
   const periodStartTag = extractTagValue(content, 'DTSTART');
   const periodEndTag = extractTagValue(content, 'DTEND');
-  const periodStartParsed = parseOfxDate(periodStartTag);
-  const periodEndParsed = parseOfxDate(periodEndTag);
 
   const ledgerMatch = content.match(/<LEDGERBAL>[\s\S]*?<BALAMT>([^<\r\n]*)/i);
   const finalBalance = parseOfxAmount(ledgerMatch?.[1] ?? null) ?? 0;
@@ -108,8 +240,12 @@ export function parseOFX(buffer: Buffer): ParsedStatement {
       const fitId = extractTagValue(block, 'FITID');
       const checkNum = extractTagValue(block, 'CHECKNUM');
 
+      if (isBalanceTransaction(memo)) {
+        return null;
+      }
+
       return {
-        id: fitId || `${posted.key}-${index}`,
+        id: `${fitId || checkNum || posted.key}-${index}`,
         postedKey: posted.key,
         date: posted.date,
         description: normalizeDescription(memo, typeTag),
@@ -150,10 +286,12 @@ export function parseOFX(buffer: Buffer): ParsedStatement {
   const maxDate = sortedAsc[sortedAsc.length - 1]?.date;
 
   return {
-    periodStart: periodStartParsed?.date ?? minDate,
-    periodEnd: periodEndParsed?.date ?? maxDate,
+    periodStart: minDate ?? parseOfxDate(periodStartTag)?.date,
+    periodEnd: maxDate ?? parseOfxDate(periodEndTag)?.date,
     initialBalance: Number(initialBalance.toFixed(2)),
     finalBalance: Number(finalBalance.toFixed(2)),
+    bank,
+    warnings: buildWarnings(bank, options),
     transactions
   };
 }

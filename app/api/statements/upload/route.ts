@@ -28,7 +28,7 @@ export async function POST(request: Request) {
 
   const { data: account } = await supabase
     .from('bank_accounts')
-    .select('id, company_id')
+    .select('id, company_id, bank_name, account_number')
     .eq('id', accountId)
     .eq('company_id', session.companyId)
     .single();
@@ -41,7 +41,10 @@ export async function POST(request: Request) {
 
   let parsed;
   try {
-    parsed = parseOFX(buffer);
+    parsed = parseOFX(buffer, {
+      expectedBankName: account.bank_name,
+      expectedAccountNumber: account.account_number
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Falha ao processar arquivo OFX.';
     return jsonError(message, 400);
@@ -108,6 +111,8 @@ export async function POST(request: Request) {
   return jsonOk({
     success: true,
     statement,
-    transactionsCount: parsed.transactions.length
+    transactionsCount: parsed.transactions.length,
+    bank: parsed.bank,
+    warnings: parsed.warnings
   });
 }
