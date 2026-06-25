@@ -81,8 +81,9 @@ Resultado ate aqui:
 
 ## Pendencias apos migracao
 
-- Commitar e fazer push para `origin/main`.
-- Confirmar deploy Vercel. Se o repo ja estiver conectado na Vercel, o push em `main` deve disparar deploy automatico. Caso nao esteja, sera preciso conectar/importar o repo na Vercel ou usar Vercel CLI autenticado.
+- GitHub concluido: commit `f18f7a2` (`feat: promote CashFlowAI app to repository root`) enviado para `origin/main`.
+- Confirmar deploy Vercel. Se o repo ja estiver conectado na Vercel, o push em `main` deve disparar deploy automatico.
+- Deploy Vercel via CLI nao foi disparado neste ambiente porque nao existe `.vercel/`, `vercel.json`, CLI `vercel` instalada ou `VERCEL_TOKEN` disponivel. Para disparar manualmente, conectar/importar o repo na Vercel ou rodar Vercel CLI autenticado.
 - Aplicar no Supabase remoto a migration `supabase/migrations/006_reconciliation_rls.sql`.
   - Tentativa anterior via `psql` falhou por DNS do host Supabase neste ambiente.
 
