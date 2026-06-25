@@ -86,6 +86,7 @@ Resultado ate aqui:
 - Deploy Vercel via CLI nao foi disparado neste ambiente porque nao existe `.vercel/`, `vercel.json`, CLI `vercel` instalada ou `VERCEL_TOKEN` disponivel. Para disparar manualmente, conectar/importar o repo na Vercel ou rodar Vercel CLI autenticado.
 - Aplicar no Supabase remoto a migration `supabase/migrations/006_reconciliation_rls.sql`.
   - Tentativa anterior via `psql` falhou por DNS do host Supabase neste ambiente.
+- Correcao de runtime no dashboard: se o Prisma nao conseguir conectar ao Postgres, `/dashboard` renderiza aviso de banco indisponivel em vez de cair no overlay vermelho do Next. O host atual `db.vrbnbjxyqouvbqgpflqp.supabase.co` nao resolve no DNS; ainda e necessario substituir `DATABASE_URL`/`DIRECT_URL` pelas strings corretas do projeto Supabase.
 
 ---
 
