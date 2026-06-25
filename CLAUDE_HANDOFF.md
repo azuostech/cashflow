@@ -1,6 +1,53 @@
 # Handoff - CashFlowAI como projeto raiz
 
-## Atualizacao mais recente - migracao de estrutura
+## Atualizacao mais recente - Etapa 07
+
+Etapa 07 implementada na raiz do projeto. Entrega DRE, Fluxo de Caixa, exportacao Excel e Dias de Caixa como metrica central.
+
+Arquivos principais:
+
+- `lib/reports/dre.ts`
+- `lib/reports/cashflow.ts`
+- `lib/exports/dre-excel.ts`
+- `lib/reports/dre.test.ts`
+- `lib/reports/cashflow.test.ts`
+- `app/api/reports/dre/route.ts`
+- `app/api/reports/dre/export/route.ts`
+- `app/api/reports/cashflow/route.ts`
+- `app/(app)/reports/dre/page.tsx`
+- `app/(app)/reports/cashflow/page.tsx`
+
+Comportamento entregue:
+
+- DRE calcula por `competenceDate` e `convertedAmount`.
+- Fluxo de Caixa calcula realizados por `paymentDate` e previstos por `dueDate`.
+- Parcelas pendentes entram na projecao do fluxo.
+- DRE retorna arvore hierarquica, subtotais S1-S5 e comparativo opcional com `compareValue`/`delta`.
+- Export DRE gera `.xlsx` em `/api/reports/dre/export`.
+- Tela `/reports/dre` tem visao executiva/tecnica, comparativo MoM, filtro por centro de custo, expansao de categorias e exportacao Excel.
+- Tela `/reports/cashflow` exibe Dias de Caixa, KPIs de realizados/previstos, timeline semanal e destaque de risco de caixa.
+
+Verificacoes executadas na raiz:
+
+```bash
+npm run typecheck
+npm run test
+npm run lint
+npm run build
+```
+
+Resultado:
+
+- Typecheck: OK.
+- Testes: 15 arquivos, 135 testes passando.
+- Lint: OK.
+- Build: OK.
+
+Observacao operacional: as rotas dependem do Prisma/Postgres. A `DATABASE_URL` atual ainda aponta para host Supabase que nao resolve no DNS; com dados reais, corrigir `DATABASE_URL`/`DIRECT_URL` continua necessario.
+
+---
+
+## Historico - migracao de estrutura
 
 O projeto `cashflowai/` foi promovido para a raiz do repositorio em 2026-06-24/25. O legado anterior da raiz foi substituido por completo no working tree, preservando apenas:
 

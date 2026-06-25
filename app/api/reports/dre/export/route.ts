@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { buildExecutiveSummary, calculateDRE, type DRENodeResult } from '@/lib/reports/dre';
+import { exportDREToExcel } from '@/lib/exports/dre-excel';
+import { prisma } from '@/lib/prisma';
+import { calculateDRE } from '@/lib/reports/dre';
 import { getSessionContext, isSessionError } from '@/lib/session';
 
 const schema = z.object({
@@ -8,15 +10,8 @@ const schema = z.object({
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   compareStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   compareEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  costCenterId: z.string().uuid().optional(),
-  view: z.enum(['executive', 'technical']).default('executive')
+  costCenterId: z.string().uuid().optional()
 });
-
-type DRENodeWithDelta = DRENodeResult & {
-  compareValue?: number;
-  delta?: number | null;
-  children: DRENodeWithDelta[];
-};
 
 function parseDateOnly(value: string): Date {
   return new Date(`${value}T00:00:00`);
@@ -34,33 +29,22 @@ export async function GET(request: NextRequest) {
   }
 
   const query = parsed.data;
-  const [dre, compareDre] = await Promise.all([
+  const [company, dre, compareDre] = await Promise.all([
+    prisma.company.findUnique({ where: { id: session.companyId }, select: { name: true } }),
     calculateDRE(session.companyId, parseDateOnly(query.startDate), parseDateOnly(query.endDate), query.costCenterId),
     query.compareStart && query.compareEnd
       ? calculateDRE(session.companyId, parseDateOnly(query.compareStart), parseDateOnly(query.compareEnd), query.costCenterId)
-      : Promise.resolve(null)
+      : Promise.resolve(undefined)
   ]);
 
-  function addDelta(nodes: DRENodeResult[]): DRENodeWithDelta[] {
-    return nodes.map((node) => {
-      const compareValue = compareDre?.nodes[node.code]?.value ?? 0;
-      const delta = compareDre && compareValue !== 0 ? ((node.value - compareValue) / Math.abs(compareValue)) * 100 : null;
+  const buffer = exportDREToExcel(dre, compareDre, company?.name);
+  const filename = `DRE_${query.startDate}_${query.endDate}.xlsx`;
 
-      return {
-        ...node,
-        compareValue: compareDre ? compareValue : undefined,
-        delta,
-        children: addDelta(node.children)
-      };
-    });
-  }
-
-  return NextResponse.json({
-    tree: compareDre ? addDelta(dre.tree) : dre.tree,
-    subtotals: dre.subtotals,
-    executive: buildExecutiveSummary(dre),
-    period: dre.period,
-    currency: dre.currency,
-    hasCompare: Boolean(compareDre)
+  return new NextResponse(new Uint8Array(buffer), {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="${filename}"`
+    }
   });
 }
