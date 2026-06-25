@@ -1,24 +1,23 @@
 import { endOfMonth, format, parseISO, startOfMonth } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
-export function toISODate(value: Date | string): string {
-  if (typeof value === 'string') {
-    return format(parseISO(value), 'yyyy-MM-dd');
-  }
-
-  return format(value, 'yyyy-MM-dd');
+export function formatDate(date: Date | string, pattern = 'dd/MM/yyyy'): string {
+  const parsedDate = typeof date === 'string' ? parseISO(date) : date;
+  return format(parsedDate, pattern, { locale: ptBR });
 }
 
-export function monthRange(month: string): { start: string; end: string } {
-  const [year, monthPart] = month.split('-').map(Number);
-  const start = startOfMonth(new Date(year, monthPart - 1, 1));
-  const end = endOfMonth(start);
-
+export function getPeriodDates(year: number, month: number): { start: Date; end: Date } {
+  const referenceDate = new Date(year, month - 1, 1);
   return {
-    start: format(start, 'yyyy-MM-dd'),
-    end: format(end, 'yyyy-MM-dd')
+    start: startOfMonth(referenceDate),
+    end: endOfMonth(referenceDate)
   };
 }
 
-export function currentMonth(): string {
-  return format(new Date(), 'yyyy-MM');
+export function getCurrentPeriod(): { year: number; month: number } {
+  const now = new Date();
+  return {
+    year: now.getFullYear(),
+    month: now.getMonth() + 1
+  };
 }

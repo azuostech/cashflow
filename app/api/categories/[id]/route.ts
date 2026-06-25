@@ -1,72 +1,58 @@
-import { z } from 'zod';
-import { createClient } from '@/lib/supabase/server';
-import { getSessionContext } from '@/lib/auth';
-import { jsonError, jsonOk } from '@/lib/utils/http';
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { getSessionContext, isSessionError } from '@/lib/session';
+import { createAuditLog } from '@/lib/utils/audit';
+import { updateCategorySchema } from '@/lib/validations/settings.schema';
 
-const schema = z.object({
-  name: z.string().min(2).optional(),
-  type: z.enum(['income', 'expense']).optional(),
-  color: z.string().regex(/^#([A-Fa-f0-9]{6})$/).optional(),
-  keywords: z.array(z.string().min(1)).optional()
-});
+export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
+  const session = await getSessionContext();
+  if (isSessionError(session)) return session;
 
-interface Params {
-  params: {
-    id: string;
-  };
+  const category = await prisma.category.findFirst({
+    where: { id: params.id, companyId: session.companyId },
+    include: { dreNode: true, children: { where: { active: true } } }
+  });
+
+  if (!category) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  return NextResponse.json(category);
 }
 
-export async function GET(_: Request, { params }: Params) {
+export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSessionContext();
-  if (!session) return jsonError('Nao autenticado.', 401);
-  if (!session.companyId) return jsonError('Selecione uma empresa para continuar.', 400);
+  if (isSessionError(session)) return session;
 
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from('categories')
-    .select('*')
-    .eq('id', params.id)
-    .eq('company_id', session.companyId)
-    .single();
+  const category = await prisma.category.findFirst({
+    where: { id: params.id, companyId: session.companyId }
+  });
 
-  if (error || !data) return jsonError('Categoria nao encontrada.', 404);
+  if (!category) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  return jsonOk(data);
-}
-
-export async function PATCH(request: Request, { params }: Params) {
-  const session = await getSessionContext();
-  if (!session) return jsonError('Nao autenticado.', 401);
-  if (!session.companyId) return jsonError('Selecione uma empresa para continuar.', 400);
-
-  const parsed = schema.safeParse(await request.json());
-  if (!parsed.success) {
-    return jsonError('Dados invalidos para atualizacao.', 400);
+  if (category.deprecatedAt) {
+    return NextResponse.json({ error: 'Categoria depreciada nao pode ser editada' }, { status: 409 });
   }
 
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from('categories')
-    .update({ ...parsed.data, updated_at: new Date().toISOString() })
-    .eq('id', params.id)
-    .eq('company_id', session.companyId)
-    .select('*')
-    .single();
+  const body = await request.json();
+  const parsed = updateCategorySchema.safeParse(body);
 
-  if (error || !data) return jsonError(error?.message ?? 'Falha ao atualizar categoria.', 500);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 422 });
+  }
 
-  return jsonOk(data);
-}
+  const updated = await prisma.category.update({
+    where: { id: params.id },
+    data: parsed.data
+  });
 
-export async function DELETE(_: Request, { params }: Params) {
-  const session = await getSessionContext();
-  if (!session) return jsonError('Nao autenticado.', 401);
-  if (!session.companyId) return jsonError('Selecione uma empresa para continuar.', 400);
+  await createAuditLog({
+    companyId: session.companyId,
+    userId: session.userId,
+    action: 'update',
+    entityType: 'category',
+    entityId: params.id,
+    beforeData: category as unknown as Record<string, unknown>,
+    afterData: updated as unknown as Record<string, unknown>,
+    request
+  });
 
-  const supabase = createClient();
-  const { error } = await supabase.from('categories').delete().eq('id', params.id).eq('company_id', session.companyId);
-
-  if (error) return jsonError(error.message, 500);
-
-  return jsonOk({ success: true });
+  return NextResponse.json(updated);
 }

@@ -1,0 +1,946 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  owner
+  admin
+  financial
+  accountant
+  viewer
+}
+
+enum TransactionType {
+  revenue
+  expense
+  transfer
+  loan
+  investment
+  contribution
+  profit_distribution
+}
+
+enum TransactionStatus {
+  pending
+  paid
+  received
+  cancelled
+  overdue
+}
+
+enum ReconciliationStatus {
+  unreconciled
+  partial
+  reconciled
+  ignored
+}
+
+enum ReconciliationMethod {
+  automatic
+  manual
+  ai_suggested
+}
+
+enum BankMoveType {
+  credit
+  debit
+}
+
+enum BankMoveSource {
+  file_import
+  api_sync
+  manual
+}
+
+enum StatementSource {
+  file_ofx
+  file_csv
+  file_xlsx
+  api_sync
+  manual
+}
+
+enum AccountingPeriodStatus {
+  open
+  closed
+  locked
+}
+
+enum AuditAction {
+  create
+  update
+  delete
+  cancel
+  reverse
+  reconcile
+  unreconcile
+  adjust
+  import
+  period_close
+  period_reopen
+  period_lock
+  period_unlock
+  revoke
+}
+
+enum CashflowGroup {
+  operating_inflow
+  operating_outflow
+  investing_inflow
+  investing_outflow
+  financing_inflow
+  financing_outflow
+  transfer
+}
+
+enum DRENodeType {
+  revenue
+  deduction
+  variable_cost
+  fixed_cost
+  financial
+  tax
+  profit_distribution
+  depreciation
+}
+
+enum BankAccountType {
+  checking
+  savings
+  cash
+  digital
+  investment
+}
+
+enum ImportAmountConvention {
+  signed_single
+  separate_columns
+  debit_negative
+}
+
+enum ApprovalStatus {
+  not_required
+  pending
+  approved
+  rejected
+}
+
+enum FileFormat {
+  csv
+  xlsx
+}
+
+enum ExchangeRateSource {
+  manual
+  api_bacen
+  api_ecb
+  api_openexchange
+  bank
+  custom
+}
+
+enum SyncFrequency {
+  manual
+  daily
+  hourly
+}
+
+enum BankConnectionStatus {
+  active
+  expired
+  error
+  revoked
+  pending_authorization
+}
+
+enum ConnectionType {
+  api
+  open_finance
+  manual_upload
+}
+
+enum ContactType {
+  customer
+  supplier
+  both
+  employee
+  other
+}
+
+enum AttachmentEntityType {
+  transaction
+  installment
+  bank_move
+  bank_statement
+  contact
+  reconciliation
+}
+
+enum FileType {
+  invoice
+  receipt
+  contract
+  bank_statement
+  payment_proof
+  other
+}
+
+enum CompanySize {
+  micro
+  small
+  medium
+  large
+}
+
+model Currency {
+  code          String  @id @db.Char(3)
+  name          String  @db.VarChar(50)
+  symbol        String  @db.VarChar(5)
+  decimalPlaces Int     @default(2) @map("decimal_places")
+  active        Boolean @default(true)
+
+  companies         Company[]
+  bankAccounts      BankAccount[]
+  transactions      Transaction[] @relation("TransactionOriginalCurrency")
+  installments      Installment[] @relation("InstallmentOriginalCurrency")
+  bankMoves         BankMove[] @relation("BankMoveOriginalCurrency")
+  exchangeRatesFrom ExchangeRate[] @relation("ExchangeRateFrom")
+  exchangeRatesTo   ExchangeRate[] @relation("ExchangeRateTo")
+
+  @@map("currencies")
+}
+
+model Company {
+  id              String       @id @default(uuid()) @db.Uuid
+  name            String       @db.VarChar(200)
+  legalName       String?      @map("legal_name") @db.VarChar(200)
+  document        String       @unique @db.VarChar(20)
+  baseCurrency    String       @default("BRL") @map("base_currency") @db.Char(3)
+  country         String       @default("BR") @db.Char(2)
+  sector          String?      @db.VarChar(100)
+  size            CompanySize?
+  fiscalYearStart Int          @default(1) @map("fiscal_year_start")
+  timezone        String       @default("America/Sao_Paulo") @db.VarChar(50)
+  active          Boolean      @default(true)
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  currency          Currency           @relation(fields: [baseCurrency], references: [code])
+  userRoles         UserCompanyRole[]
+  bankAccounts      BankAccount[]
+  costCenters       CostCenter[]
+  dreNodes          DRENode[]
+  categories        Category[]
+  contacts          Contact[]
+  transactions      Transaction[]
+  bankStatements    BankStatement[]
+  bankMoves         BankMove[]
+  accountingPeriods AccountingPeriod[]
+  auditLogs         AuditLog[]
+  exchangeRates     ExchangeRate[]
+  importMappings    ImportMapping[]
+  bankProviders     BankProvider[]
+  attachments       Attachment[]
+  tags              Tag[]
+
+  @@map("companies")
+}
+
+model User {
+  id          String    @id @db.Uuid
+  email       String    @unique @db.VarChar(255)
+  name        String    @db.VarChar(200)
+  avatarUrl   String?   @map("avatar_url")
+  phone       String?   @db.VarChar(20)
+  active      Boolean   @default(true)
+  lastLoginAt DateTime? @map("last_login_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  companyRoles        UserCompanyRole[]
+  createdTransactions Transaction[] @relation("TransactionCreatedBy")
+  auditLogs           AuditLog[]
+  closedPeriods       AccountingPeriod[] @relation("ClosedBy")
+  reopenedPeriods     AccountingPeriod[] @relation("ReopenedBy")
+  uploadedAttachments Attachment[]
+
+  @@map("users")
+}
+
+model UserCompanyRole {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  companyId  String    @map("company_id") @db.Uuid
+  role       UserRole
+  active     Boolean   @default(true)
+  invitedAt  DateTime? @map("invited_at")
+  acceptedAt DateTime? @map("accepted_at")
+
+  user    User    @relation(fields: [userId], references: [id])
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@unique([userId, companyId])
+  @@index([companyId])
+  @@map("user_company_roles")
+}
+
+model BankProvider {
+  id                   String   @id @default(uuid()) @db.Uuid
+  companyId            String?  @map("company_id") @db.Uuid
+  name                 String   @db.VarChar(100)
+  country              String   @db.Char(2)
+  website              String?  @db.VarChar(255)
+  supportedFormats     String[] @map("supported_formats")
+  apiAvailable         Boolean  @default(false) @map("api_available")
+  openFinanceAvailable Boolean  @default(false) @map("open_finance_available")
+  defaultCurrency      String   @default("BRL") @map("default_currency") @db.Char(3)
+  notes                String?
+  active               Boolean  @default(true)
+  isGlobal             Boolean  @default(false) @map("is_global")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  company         Company?         @relation(fields: [companyId], references: [id])
+  bankAccounts    BankAccount[]
+  importMappings  ImportMapping[]
+  bankConnections BankConnection[]
+
+  @@map("bank_providers")
+}
+
+model BankAccount {
+  id                            String          @id @default(uuid()) @db.Uuid
+  companyId                     String          @map("company_id") @db.Uuid
+  bankProviderId                String?         @map("bank_provider_id") @db.Uuid
+  name                          String          @db.VarChar(100)
+  type                          BankAccountType
+  currency                      String          @default("BRL") @db.Char(3)
+  bankCode                      String?         @map("bank_code") @db.VarChar(10)
+  bankName                      String?         @map("bank_name") @db.VarChar(100)
+  agency                        String?         @db.VarChar(20)
+  accountNumber                 String?         @map("account_number") @db.VarChar(30)
+  initialBalance                Decimal         @default(0) @map("initial_balance") @db.Decimal(18, 2)
+  initialBalanceDate            DateTime        @map("initial_balance_date") @db.Date
+  externalAccountId             String?         @map("external_account_id") @db.VarChar(100)
+  iban                          String?         @db.VarChar(34)
+  swift                         String?         @db.VarChar(11)
+  routingNumber                 String?         @map("routing_number") @db.VarChar(20)
+  includeInConsolidatedCashflow Boolean         @default(true) @map("include_in_consolidated_cashflow")
+  currentBalance                Decimal?        @map("current_balance") @db.Decimal(18, 2)
+  currentBalanceUpdatedAt       DateTime?       @map("current_balance_updated_at")
+  color                         String?         @db.Char(7)
+  active                        Boolean         @default(true)
+  createdAt                     DateTime        @default(now()) @map("created_at")
+  updatedAt                     DateTime        @updatedAt @map("updated_at")
+
+  company          Company         @relation(fields: [companyId], references: [id])
+  bankProvider     BankProvider?   @relation(fields: [bankProviderId], references: [id])
+  currencyRef      Currency        @relation(fields: [currency], references: [code])
+  statements       BankStatement[]
+  bankMoves        BankMove[]
+  transactions     Transaction[] @relation("TransactionBankAccount")
+  transactionsDest Transaction[] @relation("TransactionDestBankAccount")
+  installments     Installment[]
+  connections      BankConnection[]
+
+  @@index([companyId])
+  @@index([companyId, active])
+  @@map("bank_accounts")
+}
+
+model CostCenter {
+  id        String   @id @default(uuid()) @db.Uuid
+  companyId String   @map("company_id") @db.Uuid
+  name      String   @db.VarChar(100)
+  code      String?  @db.VarChar(20)
+  parentId  String?  @map("parent_id") @db.Uuid
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  company      Company @relation(fields: [companyId], references: [id])
+  parent       CostCenter? @relation("CostCenterHierarchy", fields: [parentId], references: [id])
+  children     CostCenter[] @relation("CostCenterHierarchy")
+  transactions Transaction[]
+  installments Installment[]
+  splits       TransactionCostCenterSplit[]
+
+  @@index([companyId])
+  @@index([parentId])
+  @@map("cost_centers")
+}
+
+model DRENode {
+  id         String      @id @default(uuid()) @db.Uuid
+  companyId  String?     @map("company_id") @db.Uuid
+  name       String      @db.VarChar(100)
+  code       String      @db.VarChar(20)
+  type       DRENodeType
+  sign       Int
+  parentId   String?     @map("parent_id") @db.Uuid
+  sortOrder  Int         @map("sort_order")
+  isSubtotal Boolean     @default(false) @map("is_subtotal")
+  formula    String?
+  active     Boolean     @default(true)
+  isGlobal   Boolean     @default(false) @map("is_global")
+
+  company    Company? @relation(fields: [companyId], references: [id])
+  parent     DRENode? @relation("DREHierarchy", fields: [parentId], references: [id])
+  children   DRENode[] @relation("DREHierarchy")
+  categories Category[]
+
+  @@index([companyId])
+  @@index([parentId])
+  @@map("dre_nodes")
+}
+
+model Category {
+  id            String          @id @default(uuid()) @db.Uuid
+  companyId     String          @map("company_id") @db.Uuid
+  dreNodeId     String          @map("dre_node_id") @db.Uuid
+  name          String          @db.VarChar(100)
+  type          TransactionType
+  cashflowGroup CashflowGroup   @map("cashflow_group")
+  parentId      String?         @map("parent_id") @db.Uuid
+  color         String?         @db.Char(7)
+  icon          String?         @db.VarChar(50)
+  active        Boolean         @default(true)
+  isSystem      Boolean         @default(false) @map("is_system")
+  deprecatedAt  DateTime?       @map("deprecated_at")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  company      Company @relation(fields: [companyId], references: [id])
+  dreNode      DRENode @relation(fields: [dreNodeId], references: [id])
+  parent       Category? @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children     Category[] @relation("CategoryHierarchy")
+  transactions Transaction[]
+  installments Installment[]
+
+  @@index([companyId])
+  @@index([companyId, type])
+  @@index([dreNodeId])
+  @@map("categories")
+}
+
+model Contact {
+  id        String      @id @default(uuid()) @db.Uuid
+  companyId String      @map("company_id") @db.Uuid
+  type      ContactType
+  name      String      @db.VarChar(200)
+  document  String?     @db.VarChar(20)
+  email     String?     @db.VarChar(255)
+  phone     String?     @db.VarChar(20)
+  active    Boolean     @default(true)
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+
+  company      Company @relation(fields: [companyId], references: [id])
+  transactions Transaction[]
+
+  @@index([companyId])
+  @@index([companyId, type])
+  @@map("contacts")
+}
+
+model AccountingPeriod {
+  id               String                 @id @default(uuid()) @db.Uuid
+  companyId        String                 @map("company_id") @db.Uuid
+  year             Int
+  month            Int
+  periodStart      DateTime               @map("period_start") @db.Date
+  periodEnd        DateTime               @map("period_end") @db.Date
+  status           AccountingPeriodStatus @default(open)
+  closedById       String?                @map("closed_by") @db.Uuid
+  closedAt         DateTime?              @map("closed_at")
+  reopenedById     String?                @map("reopened_by") @db.Uuid
+  reopenedAt       DateTime?              @map("reopened_at")
+  reopenReason     String?                @map("reopen_reason")
+  lockReason       String?                @map("lock_reason")
+  dreSnapshot      Json?                  @map("dre_snapshot")
+  cashflowSnapshot Json?                  @map("cashflow_snapshot")
+  createdAt        DateTime               @default(now()) @map("created_at")
+  updatedAt        DateTime               @updatedAt @map("updated_at")
+
+  company      Company @relation(fields: [companyId], references: [id])
+  closedBy     User? @relation("ClosedBy", fields: [closedById], references: [id])
+  reopenedBy   User? @relation("ReopenedBy", fields: [reopenedById], references: [id])
+  transactions Transaction[]
+  installments Installment[]
+
+  @@unique([companyId, year, month])
+  @@index([companyId, status])
+  @@map("accounting_periods")
+}
+
+model ExchangeRate {
+  id           String             @id @default(uuid()) @db.Uuid
+  companyId    String?            @map("company_id") @db.Uuid
+  fromCurrency String             @map("from_currency") @db.Char(3)
+  toCurrency   String             @map("to_currency") @db.Char(3)
+  rate         Decimal            @db.Decimal(20, 8)
+  rateDate     DateTime           @map("rate_date") @db.Date
+  source       ExchangeRateSource @default(manual)
+  createdById  String?            @map("created_by") @db.Uuid
+  createdAt    DateTime           @default(now()) @map("created_at")
+
+  company         Company? @relation(fields: [companyId], references: [id])
+  fromCurrencyRef Currency @relation("ExchangeRateFrom", fields: [fromCurrency], references: [code])
+  toCurrencyRef   Currency @relation("ExchangeRateTo", fields: [toCurrency], references: [code])
+
+  @@index([companyId, fromCurrency, toCurrency, rateDate])
+  @@map("exchange_rates")
+}
+
+model RecurrenceRule {
+  id               String    @id @default(uuid()) @db.Uuid
+  companyId        String    @map("company_id") @db.Uuid
+  frequency        String    @db.VarChar(20)
+  interval         Int       @default(1)
+  startDate        DateTime  @map("start_date") @db.Date
+  endDate          DateTime? @map("end_date") @db.Date
+  occurrencesLimit Int?      @map("occurrences_limit")
+  dayOfMonth       Int?      @map("day_of_month")
+  active           Boolean   @default(true)
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  transactions Transaction[]
+
+  @@index([companyId])
+  @@map("recurrence_rules")
+}
+
+model Transaction {
+  id                    String               @id @default(uuid()) @db.Uuid
+  companyId             String               @map("company_id") @db.Uuid
+  type                  TransactionType
+  description           String               @db.VarChar(500)
+  notes                 String?
+  originalAmount        Decimal              @map("original_amount") @db.Decimal(18, 2)
+  originalCurrency      String               @map("original_currency") @db.Char(3)
+  convertedAmount       Decimal              @map("converted_amount") @db.Decimal(18, 2)
+  companyCurrency       String               @map("company_currency") @db.Char(3)
+  exchangeRate          Decimal              @default(1) @map("exchange_rate") @db.Decimal(20, 8)
+  exchangeRateDate      DateTime?            @map("exchange_rate_date") @db.Date
+  competenceDate        DateTime             @map("competence_date") @db.Date
+  dueDate               DateTime             @map("due_date") @db.Date
+  paymentDate           DateTime?            @map("payment_date") @db.Date
+  status                TransactionStatus    @default(pending)
+  categoryId            String?              @map("category_id") @db.Uuid
+  costCenterId          String?              @map("cost_center_id") @db.Uuid
+  bankAccountId         String?              @map("bank_account_id") @db.Uuid
+  destBankAccountId     String?              @map("dest_bank_account_id") @db.Uuid
+  contactId             String?              @map("contact_id") @db.Uuid
+  accountingPeriodId    String?              @map("accounting_period_id") @db.Uuid
+  isInstallment         Boolean              @default(false) @map("is_installment")
+  installmentCount      Int?                 @map("installment_count")
+  recurrenceRuleId      String?              @map("recurrence_rule_id") @db.Uuid
+  recurrenceParentId    String?              @map("recurrence_parent_id") @db.Uuid
+  origin                String               @default("manual") @db.VarChar(20)
+  reconciliationStatus  ReconciliationStatus @default(unreconciled) @map("reconciliation_status")
+  isReversal            Boolean              @default(false) @map("is_reversal")
+  reversalOfId          String?              @map("reversal_of_id") @db.Uuid
+  hasCostCenterSplit    Boolean              @default(false) @map("has_cost_center_split")
+  requiresApproval      Boolean              @default(false) @map("requires_approval")
+  approvalStatus        ApprovalStatus       @default(not_required) @map("approval_status")
+  approvedById          String?              @map("approved_by") @db.Uuid
+  approvedAt            DateTime?            @map("approved_at")
+  rejectionReason       String?              @map("rejection_reason")
+  sourceDocumentNumber  String?              @map("source_document_number") @db.VarChar(100)
+  externalReference     String?              @map("external_reference") @db.VarChar(255)
+  descriptionNormalized String?              @map("description_normalized")
+  merchantName          String?              @map("merchant_name") @db.VarChar(200)
+  merchantDocument      String?              @map("merchant_document") @db.VarChar(20)
+  createdFromBankMoveId String?              @map("created_from_bank_move_id") @db.Uuid
+  aiSuggested           Boolean              @default(false) @map("ai_suggested")
+  aiConfidence          Decimal?             @map("ai_confidence") @db.Decimal(5, 4)
+  createdById           String               @map("created_by") @db.Uuid
+  createdAt             DateTime             @default(now()) @map("created_at")
+  updatedAt             DateTime             @updatedAt @map("updated_at")
+  deletedAt             DateTime?            @map("deleted_at")
+
+  company             Company @relation(fields: [companyId], references: [id])
+  category            Category? @relation(fields: [categoryId], references: [id])
+  costCenter          CostCenter? @relation(fields: [costCenterId], references: [id])
+  bankAccount         BankAccount? @relation("TransactionBankAccount", fields: [bankAccountId], references: [id])
+  destBankAccount     BankAccount? @relation("TransactionDestBankAccount", fields: [destBankAccountId], references: [id])
+  contact             Contact? @relation(fields: [contactId], references: [id])
+  accountingPeriod    AccountingPeriod? @relation(fields: [accountingPeriodId], references: [id])
+  recurrenceRule      RecurrenceRule? @relation(fields: [recurrenceRuleId], references: [id])
+  createdBy           User @relation("TransactionCreatedBy", fields: [createdById], references: [id])
+  originalCurrencyRef Currency @relation("TransactionOriginalCurrency", fields: [originalCurrency], references: [code])
+  installments        Installment[]
+  costCenterSplits    TransactionCostCenterSplit[]
+  reconciliations     Reconciliation[]
+  reconciliationSuggestions ReconciliationSuggestion[]
+  tags                TransactionTag[]
+
+  @@index([companyId, competenceDate])
+  @@index([companyId, dueDate])
+  @@index([companyId, paymentDate])
+  @@index([companyId, status])
+  @@index([companyId, type])
+  @@index([companyId, categoryId])
+  @@index([companyId, costCenterId])
+  @@index([companyId, reconciliationStatus])
+  @@index([companyId, deletedAt])
+  @@map("transactions")
+}
+
+model Installment {
+  id                    String               @id @default(uuid()) @db.Uuid
+  transactionId         String               @map("transaction_id") @db.Uuid
+  companyId             String               @map("company_id") @db.Uuid
+  number                Int
+  originalAmount        Decimal              @map("original_amount") @db.Decimal(18, 2)
+  originalCurrency      String               @map("original_currency") @db.Char(3)
+  convertedAmount       Decimal              @map("converted_amount") @db.Decimal(18, 2)
+  companyCurrency       String               @map("company_currency") @db.Char(3)
+  exchangeRate          Decimal              @default(1) @map("exchange_rate") @db.Decimal(20, 8)
+  exchangeRateDate      DateTime?            @map("exchange_rate_date") @db.Date
+  competenceDate        DateTime             @map("competence_date") @db.Date
+  dueDate               DateTime             @map("due_date") @db.Date
+  paymentDate           DateTime?            @map("payment_date") @db.Date
+  status                TransactionStatus    @default(pending)
+  bankAccountId         String?              @map("bank_account_id") @db.Uuid
+  costCenterId          String?              @map("cost_center_id") @db.Uuid
+  categoryId            String?              @map("category_id") @db.Uuid
+  accountingPeriodId    String?              @map("accounting_period_id") @db.Uuid
+  reconciliationStatus  ReconciliationStatus @default(unreconciled) @map("reconciliation_status")
+  createdFromBankMoveId String?              @map("created_from_bank_move_id") @db.Uuid
+  createdAt             DateTime             @default(now()) @map("created_at")
+  updatedAt             DateTime             @updatedAt @map("updated_at")
+
+  transaction         Transaction @relation(fields: [transactionId], references: [id])
+  bankAccount         BankAccount? @relation(fields: [bankAccountId], references: [id])
+  costCenter          CostCenter? @relation(fields: [costCenterId], references: [id])
+  category            Category? @relation(fields: [categoryId], references: [id])
+  accountingPeriod    AccountingPeriod? @relation(fields: [accountingPeriodId], references: [id])
+  originalCurrencyRef Currency @relation("InstallmentOriginalCurrency", fields: [originalCurrency], references: [code])
+  reconciliations     Reconciliation[]
+
+  @@index([transactionId])
+  @@index([companyId, dueDate])
+  @@index([companyId, status])
+  @@map("installments")
+}
+
+model TransactionCostCenterSplit {
+  id            String   @id @default(uuid()) @db.Uuid
+  transactionId String   @map("transaction_id") @db.Uuid
+  companyId     String   @map("company_id") @db.Uuid
+  costCenterId  String   @map("cost_center_id") @db.Uuid
+  amount        Decimal  @db.Decimal(18, 2)
+  percentage    Decimal  @db.Decimal(5, 2)
+  notes         String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  transaction Transaction @relation(fields: [transactionId], references: [id])
+  costCenter  CostCenter @relation(fields: [costCenterId], references: [id])
+
+  @@index([transactionId])
+  @@map("transaction_cost_center_splits")
+}
+
+model ImportMapping {
+  id                   String                 @id @default(uuid()) @db.Uuid
+  companyId            String                 @map("company_id") @db.Uuid
+  bankProviderId       String?                @map("bank_provider_id") @db.Uuid
+  name                 String                 @db.VarChar(100)
+  fileFormat           FileFormat             @map("file_format")
+  dateColumn           String                 @map("date_column") @db.VarChar(50)
+  descriptionColumn    String                 @map("description_column") @db.VarChar(50)
+  amountColumn         String?                @map("amount_column") @db.VarChar(50)
+  debitColumn          String?                @map("debit_column") @db.VarChar(50)
+  creditColumn         String?                @map("credit_column") @db.VarChar(50)
+  currencyColumn       String?                @map("currency_column") @db.VarChar(50)
+  referenceColumn      String?                @map("reference_column") @db.VarChar(50)
+  balanceColumn        String?                @map("balance_column") @db.VarChar(50)
+  dateFormat           String                 @map("date_format") @db.VarChar(30)
+  decimalSeparator     String                 @default(".") @map("decimal_separator") @db.Char(1)
+  thousandSeparator    String?                @map("thousand_separator") @db.Char(1)
+  headerRow            Int                    @default(1) @map("header_row")
+  skipRowsStart        Int                    @default(0) @map("skip_rows_start")
+  skipRowsEnd          Int                    @default(0) @map("skip_rows_end")
+  amountSignConvention ImportAmountConvention @map("amount_sign_convention")
+  defaultCurrency      String                 @default("BRL") @map("default_currency") @db.Char(3)
+  isGlobal             Boolean                @default(false) @map("is_global")
+  active               Boolean                @default(true)
+  createdById          String                 @map("created_by") @db.Uuid
+  createdAt            DateTime               @default(now()) @map("created_at")
+  updatedAt            DateTime               @updatedAt @map("updated_at")
+
+  company      Company @relation(fields: [companyId], references: [id])
+  bankProvider BankProvider? @relation(fields: [bankProviderId], references: [id])
+  statements   BankStatement[]
+
+  @@index([companyId])
+  @@map("import_mappings")
+}
+
+model BankStatement {
+  id              String          @id @default(uuid()) @db.Uuid
+  companyId       String          @map("company_id") @db.Uuid
+  bankAccountId   String          @map("bank_account_id") @db.Uuid
+  source          StatementSource
+  bankProviderId  String?         @map("bank_provider_id") @db.Uuid
+  importMappingId String?         @map("import_mapping_id") @db.Uuid
+  filename        String?         @db.VarChar(255)
+  fileHash        String?         @map("file_hash") @db.VarChar(64)
+  rawFileUrl      String?         @map("raw_file_url")
+  currency        String          @db.Char(3)
+  periodStart     DateTime        @map("period_start") @db.Date
+  periodEnd       DateTime        @map("period_end") @db.Date
+  totalMoves      Int             @default(0) @map("total_moves")
+  totalDuplicates Int             @default(0) @map("total_duplicates")
+  totalErrors     Int             @default(0) @map("total_errors")
+  status          String          @default("processing") @db.VarChar(20)
+  errorMessage    String?         @map("error_message")
+  importedById    String          @map("imported_by") @db.Uuid
+  importedAt      DateTime        @default(now()) @map("imported_at")
+
+  company       Company @relation(fields: [companyId], references: [id])
+  bankAccount   BankAccount @relation(fields: [bankAccountId], references: [id])
+  importMapping ImportMapping? @relation(fields: [importMappingId], references: [id])
+  bankMoves     BankMove[]
+
+  @@unique([bankAccountId, fileHash])
+  @@index([companyId, bankAccountId])
+  @@index([companyId, periodStart, periodEnd])
+  @@map("bank_statements")
+}
+
+model BankMove {
+  id                    String               @id @default(uuid()) @db.Uuid
+  companyId             String               @map("company_id") @db.Uuid
+  bankStatementId       String               @map("bank_statement_id") @db.Uuid
+  bankAccountId         String               @map("bank_account_id") @db.Uuid
+  source                BankMoveSource       @default(file_import)
+  date                  DateTime             @db.Date
+  postedDate            DateTime             @map("posted_date") @db.Date
+  operationDate         DateTime?            @map("operation_date") @db.Date
+  type                  BankMoveType
+  originalAmount        Decimal              @map("original_amount") @db.Decimal(18, 2)
+  originalCurrency      String               @map("original_currency") @db.Char(3)
+  convertedAmount       Decimal              @map("converted_amount") @db.Decimal(18, 2)
+  companyCurrency       String               @map("company_currency") @db.Char(3)
+  exchangeRate          Decimal              @default(1) @map("exchange_rate") @db.Decimal(20, 8)
+  exchangeRateDate      DateTime?            @map("exchange_rate_date") @db.Date
+  description           String               @db.VarChar(500)
+  descriptionNormalized String?              @map("description_normalized")
+  rawDescription        String?              @map("raw_description")
+  merchantName          String?              @map("merchant_name") @db.VarChar(200)
+  merchantDocument      String?              @map("merchant_document") @db.VarChar(20)
+  bankRef               String?              @map("bank_ref") @db.VarChar(100)
+  externalId            String?              @map("external_id") @db.VarChar(255)
+  balanceAfter          Decimal?             @map("balance_after") @db.Decimal(18, 2)
+  reconciliationStatus  ReconciliationStatus @default(unreconciled) @map("reconciliation_status")
+  isPossibleDuplicate   Boolean              @default(false) @map("is_possible_duplicate")
+  importedAt            DateTime             @default(now()) @map("imported_at")
+
+  company             Company @relation(fields: [companyId], references: [id])
+  bankStatement       BankStatement @relation(fields: [bankStatementId], references: [id])
+  bankAccount         BankAccount @relation(fields: [bankAccountId], references: [id])
+  originalCurrencyRef Currency @relation("BankMoveOriginalCurrency", fields: [originalCurrency], references: [code])
+  reconciliations     Reconciliation[]
+  suggestions         ReconciliationSuggestion[]
+
+  @@unique([bankAccountId, bankRef])
+  @@unique([bankAccountId, externalId])
+  @@index([companyId, bankAccountId, date])
+  @@index([companyId, reconciliationStatus])
+  @@map("bank_moves")
+}
+
+model Reconciliation {
+  id                String               @id @default(uuid()) @db.Uuid
+  companyId         String               @map("company_id") @db.Uuid
+  bankMoveId        String               @map("bank_move_id") @db.Uuid
+  transactionId     String?              @map("transaction_id") @db.Uuid
+  installmentId     String?              @map("installment_id") @db.Uuid
+  amountMatched     Decimal              @map("amount_matched") @db.Decimal(18, 2)
+  method            ReconciliationMethod
+  confidence        Decimal?             @db.Decimal(5, 4)
+  status            String               @default("active") @db.VarChar(20)
+  reconciledById    String?              @map("reconciled_by") @db.Uuid
+  reconciledAt      DateTime             @default(now()) @map("reconciled_at")
+  notes             String?
+  unreconciledById  String?              @map("unreconciled_by") @db.Uuid
+  unreconciledAt    DateTime?            @map("unreconciled_at")
+  unreconcileReason String?              @map("unreconcile_reason")
+  adjustedManually  Boolean              @default(false) @map("adjusted_manually")
+  adjustmentReason  String?              @map("adjustment_reason")
+  adjustmentAmount  Decimal?             @map("adjustment_amount") @db.Decimal(18, 2)
+
+  bankMove    BankMove @relation(fields: [bankMoveId], references: [id])
+  transaction Transaction? @relation(fields: [transactionId], references: [id])
+  installment Installment? @relation(fields: [installmentId], references: [id])
+
+  @@index([bankMoveId])
+  @@index([transactionId])
+  @@index([installmentId])
+  @@map("reconciliations")
+}
+
+model ReconciliationSuggestion {
+  id                       String    @id @default(uuid()) @db.Uuid
+  companyId                String    @map("company_id") @db.Uuid
+  bankMoveId               String    @map("bank_move_id") @db.Uuid
+  transactionId            String?   @map("transaction_id") @db.Uuid
+  installmentId            String?   @map("installment_id") @db.Uuid
+  confidence               Decimal   @db.Decimal(5, 4)
+  reasons                  Json
+  suggestedCategoryId      String?   @map("suggested_category_id") @db.Uuid
+  suggestedCostCenterId    String?   @map("suggested_cost_center_id") @db.Uuid
+  suggestedContactId       String?   @map("suggested_contact_id") @db.Uuid
+  suggestedTransactionType String?   @map("suggested_transaction_type")
+  suggestedCompetenceDate  DateTime? @map("suggested_competence_date") @db.Date
+  canCreateTransaction     Boolean   @default(false) @map("can_create_transaction")
+  createdTransactionId     String?   @map("created_transaction_id") @db.Uuid
+  status                   String    @default("pending") @db.VarChar(20)
+  reviewedAt               DateTime? @map("reviewed_at")
+  reviewedById             String?   @map("reviewed_by") @db.Uuid
+  createdAt                DateTime  @default(now()) @map("created_at")
+
+  bankMove    BankMove @relation(fields: [bankMoveId], references: [id])
+  transaction Transaction? @relation(fields: [transactionId], references: [id])
+
+  @@index([bankMoveId])
+  @@map("reconciliation_suggestions")
+}
+
+model Attachment {
+  id              String               @id @default(uuid()) @db.Uuid
+  companyId       String               @map("company_id") @db.Uuid
+  entityType      AttachmentEntityType @map("entity_type")
+  entityId        String               @map("entity_id") @db.Uuid
+  filename        String               @db.VarChar(255)
+  storagePath     String               @map("storage_path")
+  fileUrl         String               @map("file_url")
+  fileType        FileType             @map("file_type")
+  mimeType        String               @map("mime_type") @db.VarChar(100)
+  sizeBytes       Int                  @map("size_bytes")
+  checksum        String               @db.VarChar(64)
+  aiReadable      Boolean              @default(false) @map("ai_readable")
+  aiProcessed     Boolean              @default(false) @map("ai_processed")
+  aiExtractedData Json?                @map("ai_extracted_data")
+  uploadedById    String               @map("uploaded_by") @db.Uuid
+  uploadedAt      DateTime             @default(now()) @map("uploaded_at")
+  active          Boolean              @default(true)
+
+  company    Company @relation(fields: [companyId], references: [id])
+  uploadedBy User @relation(fields: [uploadedById], references: [id])
+
+  @@index([companyId, entityType, entityId])
+  @@map("attachments")
+}
+
+model AuditLog {
+  id            String      @id @default(uuid()) @db.Uuid
+  companyId     String      @map("company_id") @db.Uuid
+  userId        String?     @map("user_id") @db.Uuid
+  action        AuditAction
+  entityType    String      @map("entity_type") @db.VarChar(50)
+  entityId      String      @map("entity_id") @db.Uuid
+  beforeData    Json?       @map("before_data")
+  afterData     Json?       @map("after_data")
+  diff          Json?
+  justification String?
+  retroactive   Boolean     @default(false)
+  ipAddress     String?     @map("ip_address") @db.VarChar(45)
+  userAgent     String?     @map("user_agent")
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+  user    User? @relation(fields: [userId], references: [id])
+
+  @@index([companyId, entityType, entityId])
+  @@index([companyId, createdAt])
+  @@index([companyId, userId])
+  @@map("audit_logs")
+}
+
+model Tag {
+  id        String   @id @default(uuid()) @db.Uuid
+  companyId String   @map("company_id") @db.Uuid
+  name      String   @db.VarChar(50)
+  color     String?  @db.Char(7)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  company      Company @relation(fields: [companyId], references: [id])
+  transactions TransactionTag[]
+
+  @@unique([companyId, name])
+  @@map("tags")
+}
+
+model TransactionTag {
+  transactionId String @map("transaction_id") @db.Uuid
+  tagId         String @map("tag_id") @db.Uuid
+
+  transaction Transaction @relation(fields: [transactionId], references: [id])
+  tag         Tag @relation(fields: [tagId], references: [id])
+
+  @@id([transactionId, tagId])
+  @@map("transaction_tags")
+}
+
+model BankConnection {
+  id                    String               @id @default(uuid()) @db.Uuid
+  companyId             String               @map("company_id") @db.Uuid
+  bankAccountId         String               @map("bank_account_id") @db.Uuid
+  bankProviderId        String               @map("bank_provider_id") @db.Uuid
+  connectionType        ConnectionType       @map("connection_type")
+  status                BankConnectionStatus
+  accessTokenEncrypted  String?              @map("access_token_encrypted")
+  refreshTokenEncrypted String?              @map("refresh_token_encrypted")
+  tokenExpiresAt        DateTime?            @map("token_expires_at")
+  lastSyncAt            DateTime?            @map("last_sync_at")
+  nextSyncAt            DateTime?            @map("next_sync_at")
+  syncFrequency         SyncFrequency        @default(manual) @map("sync_frequency")
+  scopes                String[]
+  externalConnectionId  String?              @map("external_connection_id") @db.VarChar(255)
+  errorMessage          String?              @map("error_message")
+  createdById           String               @map("created_by") @db.Uuid
+  createdAt             DateTime             @default(now()) @map("created_at")
+  updatedAt             DateTime             @updatedAt @map("updated_at")
+  revokedAt             DateTime?            @map("revoked_at")
+
+  bankAccount  BankAccount @relation(fields: [bankAccountId], references: [id])
+  bankProvider BankProvider @relation(fields: [bankProviderId], references: [id])
+  syncJobs     BankSyncJob[]
+
+  @@index([companyId])
+  @@map("bank_connections")
+}
+
+model BankSyncJob {
+  id               String    @id @default(uuid()) @db.Uuid
+  companyId        String    @map("company_id") @db.Uuid
+  bankConnectionId String    @map("bank_connection_id") @db.Uuid
+  bankAccountId    String    @map("bank_account_id") @db.Uuid
+  triggeredBy      String    @map("triggered_by") @db.VarChar(20)
+  status           String    @default("pending") @db.VarChar(20)
+  startedAt        DateTime? @map("started_at")
+  finishedAt       DateTime? @map("finished_at")
+  periodStart      DateTime  @map("period_start") @db.Date
+  periodEnd        DateTime  @map("period_end") @db.Date
+  totalFetched     Int       @default(0) @map("total_fetched")
+  totalImported    Int       @default(0) @map("total_imported")
+  totalDuplicates  Int       @default(0) @map("total_duplicates")
+  totalErrors      Int       @default(0) @map("total_errors")
+  errorMessage     String?   @map("error_message")
+  rawPayloadUrl    String?   @map("raw_payload_url")
+  bankStatementId  String?   @map("bank_statement_id") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  bankConnection BankConnection @relation(fields: [bankConnectionId], references: [id])
+
+  @@index([companyId])
+  @@map("bank_sync_jobs")
+}

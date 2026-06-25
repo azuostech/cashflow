@@ -1,104 +1,143 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-
-const schema = z.object({
-  email: z.string().email('Informe um email valido.'),
-  password: z.string().min(6, 'A senha deve ter ao menos 6 caracteres.'),
-  remember: z.boolean().optional()
-});
-
-type LoginForm = z.infer<typeof schema>;
+import { FormField } from '@/components/shared/form-field';
+import { SUPABASE_BROWSER_CONFIG_ERROR, createClient, isSupabaseBrowserConfigured } from '@/lib/supabase/client';
+import { loginSchema, type LoginInput } from '@/lib/validations/auth.schema';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [serverError, setServerError] = useState('');
 
   const {
     register,
     handleSubmit,
-    formState: { errors }
-  } = useForm<LoginForm>({
-    resolver: zodResolver(schema),
-    defaultValues: {
-      email: '',
-      password: '',
-      remember: true
-    }
+    formState: { errors, isValid }
+  } = useForm<LoginInput>({
+    resolver: zodResolver(loginSchema),
+    mode: 'onChange'
   });
 
-  async function onSubmit(values: LoginForm) {
+  async function onSubmit(data: LoginInput) {
     setLoading(true);
-    setError(null);
+    setServerError('');
 
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(values)
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      setError(data.error ?? 'Nao foi possivel realizar login.');
+    if (!isSupabaseBrowserConfigured()) {
+      setServerError(SUPABASE_BROWSER_CONFIG_ERROR);
       setLoading(false);
       return;
     }
 
-    router.push('/dashboard');
+    let error;
+
+    try {
+      const supabase = createClient();
+      const result = await supabase.auth.signInWithPassword({
+        email: data.email,
+        password: data.password
+      });
+      error = result.error;
+    } catch {
+      setServerError(SUPABASE_BROWSER_CONFIG_ERROR);
+      setLoading(false);
+      return;
+    }
+
+    if (error) {
+      setServerError(
+        error.message === 'Invalid login credentials'
+          ? 'E-mail ou senha incorretos'
+          : 'Erro ao fazer login. Tente novamente.'
+      );
+      setLoading(false);
+      return;
+    }
+
+    const redirectTo = new URLSearchParams(window.location.search).get('redirect');
+
+    if (redirectTo?.startsWith('/') && !redirectTo.startsWith('//')) {
+      router.push(redirectTo);
+      router.refresh();
+      return;
+    }
+
+    const response = await fetch('/api/onboarding/status');
+
+    if (!response.ok) {
+      setServerError('Erro ao verificar onboarding. Tente novamente.');
+      setLoading(false);
+      return;
+    }
+
+    const status: { hasCompany?: boolean; step?: number | 'complete' } = await response.json();
+
+    if (!status.hasCompany) {
+      router.push('/onboarding');
+    } else if (status.step !== 'complete') {
+      router.push(`/onboarding?step=${status.step}`);
+    } else {
+      router.push('/dashboard');
+    }
+
     router.refresh();
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md items-center px-6">
-      <section className="w-full rounded-2xl border border-app-border bg-white p-6 shadow-card">
-        <h1 className="text-2xl font-bold">Entrar</h1>
-        <p className="mb-6 text-sm text-app-subtle">Acesse sua conta para analisar o fluxo de caixa.</p>
+    <div className="rounded-lg border border-gray-200 bg-white p-8 shadow-sm">
+      <div className="mb-8 flex items-center gap-3">
+        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-emerald-600 text-sm font-bold text-white">
+          CF
+        </div>
+        <div>
+          <h1 className="text-lg font-semibold leading-tight text-gray-900">CashFlowAI</h1>
+          <p className="text-xs text-gray-500">Gestao financeira empresarial</p>
+        </div>
+      </div>
 
-        <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
-          <div>
-            <label htmlFor="email" className="mb-1 block text-sm font-medium">
-              Email
-            </label>
-            <Input id="email" type="email" autoComplete="email" {...register('email')} />
-            {errors.email ? <p className="mt-1 text-xs text-danger">{errors.email.message}</p> : null}
-          </div>
+      <h2 className="mb-1 text-xl font-semibold text-gray-900">Entrar</h2>
+      <p className="mb-6 text-sm text-gray-500">
+        Novo por aqui?{' '}
+        <Link href="/register" className="font-medium text-emerald-600 hover:underline">
+          Criar conta
+        </Link>
+      </p>
 
-          <div>
-            <label htmlFor="password" className="mb-1 block text-sm font-medium">
-              Senha
-            </label>
-            <Input id="password" type="password" autoComplete="current-password" {...register('password')} />
-            {errors.password ? <p className="mt-1 text-xs text-danger">{errors.password.message}</p> : null}
-          </div>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <FormField id="email" label="E-mail" error={errors.email?.message} required>
+          <Input id="email" type="email" placeholder="seu@email.com" autoComplete="email" {...register('email')} />
+        </FormField>
 
-          <label className="flex items-center gap-2 text-sm text-app-subtle">
-            <input type="checkbox" {...register('remember')} />
-            Lembrar-me
-          </label>
+        <FormField id="password" label="Senha" error={errors.password?.message} required>
+          <Input
+            id="password"
+            type="password"
+            placeholder="********"
+            autoComplete="current-password"
+            {...register('password')}
+          />
+        </FormField>
 
-          {error ? <p className="rounded-lg bg-red-50 p-2 text-sm text-danger">{error}</p> : null}
-
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? 'Entrando...' : 'Entrar'}
-          </Button>
-        </form>
-
-        <div className="mt-4 flex items-center justify-between text-sm">
-          <span className="text-app-subtle">Nao tem conta?</span>
-          <Link href="/cadastro" className="font-semibold text-primary">
-            Criar conta
+        <div className="text-right">
+          <Link href="/forgot-password" className="text-xs text-gray-500 hover:text-emerald-600">
+            Esqueci a senha
           </Link>
         </div>
-      </section>
-    </main>
+
+        {serverError ? (
+          <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{serverError}</div>
+        ) : null}
+
+        <Button type="submit" disabled={loading || !isValid} className="w-full">
+          {loading ? 'Entrando...' : 'Entrar'}
+        </Button>
+      </form>
+    </div>
   );
 }

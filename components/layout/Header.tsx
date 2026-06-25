@@ -1,29 +1,77 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { SessionControls } from '@/components/layout/SessionControls';
+import { Bell, Plus } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 
-export function Header({ title, subtitle }: { title: string; subtitle?: string }) {
-  const router = useRouter();
+const labels: Record<string, string> = {
+  dashboard: 'Dashboard',
+  'financial-center': 'Central Financeira',
+  transactions: 'Lancamentos',
+  payables: 'A Pagar',
+  receivables: 'A Receber',
+  bank: 'Banco',
+  statements: 'Extratos',
+  import: 'Importar',
+  reconciliation: 'Conciliacao',
+  reports: 'Relatorios',
+  dre: 'DRE',
+  cashflow: 'Fluxo de Caixa',
+  settings: 'Configuracoes',
+  company: 'Empresa',
+  users: 'Usuarios',
+  'bank-accounts': 'Contas Bancarias',
+  'chart-of-accounts': 'Plano de Contas',
+  'cost-centers': 'Centros de Custo',
+  contacts: 'Contatos',
+  periods: 'Fechamento Mensal',
+  audit: 'Auditoria'
+};
 
-  async function logout() {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    router.push('/login');
-    router.refresh();
-  }
+function currentMonthValue() {
+  const now = new Date();
+  const month = `${now.getMonth() + 1}`.padStart(2, '0');
+  return `${now.getFullYear()}-${month}`;
+}
+
+export function Header() {
+  const pathname = usePathname();
+  const parts = pathname.split('/').filter(Boolean);
+  const crumbs = parts.length ? parts.map((part) => labels[part] ?? part) : ['Dashboard'];
 
   return (
-    <header className="mb-6 flex flex-col gap-4 border-b border-app-border pb-4 md:flex-row md:items-center md:justify-between">
+    <header className="flex min-h-16 items-center justify-between border-b border-gray-200 bg-white px-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-        {subtitle ? <p className="text-sm text-app-subtle">{subtitle}</p> : null}
+        <div className="flex items-center gap-2 text-sm text-gray-500">
+          {crumbs.map((crumb, index) => (
+            <span key={`${crumb}-${index}`} className="flex items-center gap-2">
+              {index > 0 ? <span>/</span> : null}
+              <span className={index === crumbs.length - 1 ? 'font-medium text-gray-900' : ''}>{crumb}</span>
+            </span>
+          ))}
+        </div>
       </div>
-      <div className="flex w-full flex-col items-stretch gap-2 md:w-auto md:items-end">
-        <SessionControls />
-        <Button variant="outline" onClick={logout}>
-          Sair
-        </Button>
+
+      <div className="flex items-center gap-3">
+        <input
+          aria-label="Periodo"
+          type="month"
+          defaultValue={currentMonthValue()}
+          className="h-10 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+        />
+        <button
+          type="button"
+          aria-label="Notificacoes"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+        >
+          <Bell className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          className="inline-flex h-10 items-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700"
+        >
+          <Plus className="h-4 w-4" />
+          Novo Lancamento
+        </button>
       </div>
     </header>
   );

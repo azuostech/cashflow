@@ -1,9 +1,9 @@
-import './globals.css';
 import type { Metadata } from 'next';
+import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'CashFlow Analyzer',
-  description: 'Analise inteligente de fluxo de caixa empresarial.'
+  title: 'CashFlowAI',
+  description: 'SaaS financeiro B2B multiempresa'
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
