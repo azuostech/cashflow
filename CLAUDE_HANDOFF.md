@@ -1,5 +1,20 @@
 # Handoff - CashFlowAI como projeto raiz
 
+## Atualizacao mais recente - sync main 2026-06-25
+
+Solicitacao operacional: atualizar handoff, commitar e enviar `main` para `origin`.
+
+Estado antes desta atualizacao:
+
+- Branch local: `main`.
+- Working tree: limpo antes da edicao deste handoff.
+- Ultimo commit funcional local: `5b32e84` (`feat: add DRE and cashflow reports`).
+- Remoto configurado: `origin` em `https://github.com/azuostech/cashflow.git`.
+
+Esta entrada e documental. As validacoes funcionais da Etapa 07 permanecem as registradas abaixo (`typecheck`, `test`, `lint` e `build` OK).
+
+---
+
 ## Atualizacao mais recente - Etapa 07
 
 Etapa 07 implementada na raiz do projeto. Entrega DRE, Fluxo de Caixa, exportacao Excel e Dias de Caixa como metrica central.
