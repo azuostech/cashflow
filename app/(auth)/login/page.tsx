@@ -76,14 +76,14 @@ export default function LoginPage() {
       return;
     }
 
-    const status: { hasCompany?: boolean; step?: number | 'complete' } = await response.json();
+    const status: { hasCompany?: boolean; step?: number | 'complete'; homeRoute?: string } = await response.json();
 
     if (!status.hasCompany) {
       router.push('/onboarding');
     } else if (status.step !== 'complete') {
       router.push(`/onboarding?step=${status.step}`);
     } else {
-      router.push('/dashboard');
+      router.push(status.homeRoute ?? '/dashboard');
     }
 
     router.refresh();

@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import type { UserRole } from '@prisma/client';
 import { createClient } from '@/lib/supabase/server';
 
 export async function signOut() {
@@ -7,7 +8,7 @@ export async function signOut() {
   redirect('/login');
 }
 
-export function getHomeRoute(role: string): string {
+export function getHomeRoute(role: UserRole | string): string {
   switch (role) {
     case 'financial':
       return '/financial-center';

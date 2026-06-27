@@ -5,6 +5,12 @@ import { getSupabasePublicKey, getSupabaseUrl } from './lib/supabase/env';
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
+function safeHomeRoute(request: NextRequest): string {
+  const route = request.cookies.get('cf_home_route')?.value;
+  if (route?.startsWith('/') && !route.startsWith('//')) return route;
+  return '/dashboard';
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const publicRoutes = ['/login', '/register', '/forgot-password', '/reset-password', '/auth/callback', '/invite'];
@@ -60,7 +66,11 @@ export async function middleware(request: NextRequest) {
   }
 
   if (user && isGuestOnlyRoute) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+    return NextResponse.redirect(new URL(safeHomeRoute(request), request.url));
+  }
+
+  if (user && pathname === '/') {
+    return NextResponse.redirect(new URL(safeHomeRoute(request), request.url));
   }
 
   return supabaseResponse;

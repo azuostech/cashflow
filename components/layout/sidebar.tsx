@@ -13,7 +13,8 @@ import {
   Settings,
   Tags,
   Users,
-  WalletCards
+  WalletCards,
+  Zap
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
@@ -22,7 +23,7 @@ const navigation = [
     title: 'Principal',
     items: [
       { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-      { href: '/financial-center', label: 'Central Financeira', icon: WalletCards, badge: '3' }
+      { href: '/financial-center', label: 'Central Financeira', icon: Zap }
     ]
   },
   {

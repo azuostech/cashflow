@@ -1,5 +1,79 @@
 # Handoff - CashFlowAI como projeto raiz
 
+## Atualizacao mais recente - Etapa 08 Dashboard e Central Financeira 2026-06-27
+
+Solicitacao: implementar o prompt `cashflowai-etapa-08-prompt-codex.md` sem quebrar o codigo e atualizar este handoff.
+
+Arquivos principais entregues:
+
+- `lib/dashboard/kpis.ts`
+- `lib/dashboard/financial-center.ts`
+- `lib/dashboard/kpis.test.ts`
+- `app/api/dashboard/kpis/route.ts`
+- `app/api/dashboard/cashflow-projection/route.ts`
+- `app/api/financial-center/summary/route.ts`
+- `app/(app)/dashboard/dashboard-client.tsx`
+- `app/(app)/dashboard/page.tsx`
+- `app/(app)/financial-center/page.tsx`
+- `components/layout/sidebar.tsx`
+- `app/(auth)/login/page.tsx`
+- `app/api/auth/callback/route.ts`
+- `app/api/onboarding/status/route.ts`
+- `middleware.ts`
+- `lib/auth.ts`
+
+Comportamento entregue:
+
+- `getDashboardKPIs` calcula em paralelo KPIs executivos do periodo:
+  - receita, despesas, resultado e margem por `competenceDate`;
+  - comparativo com mes anterior;
+  - saldos por conta bancaria, saldo total, burn rate e dias de caixa;
+  - pendencias a pagar/a receber, vencidas e movimentos nao conciliados;
+  - top 5 categorias de despesa.
+- `getFinancialCenterSummary` retorna lista de trabalho priorizada:
+  - vencidas a pagar;
+  - vencidas a receber;
+  - vencendo hoje a pagar;
+  - esperado hoje a receber;
+  - contagem de movimentos bancarios nao conciliados.
+- Novas APIs:
+  - `GET /api/dashboard/kpis`
+  - `GET /api/dashboard/cashflow-projection?days=30`
+  - `GET /api/financial-center/summary`
+- `/dashboard` agora exibe KPIs reais, dias de caixa com cor por urgencia, saldos por conta, top despesas, grafico SVG de projecao e alerta de conciliacao.
+- `/financial-center` substituiu placeholder por uma lista operacional com itens priorizados, totais por secao e links diretos para transacoes/conciliacao.
+- Sidebar manteve DRE e Fluxo de Caixa e ajustou Central Financeira sem badge estatico.
+- `getHomeRoute` permanece em `lib/auth.ts` e o fluxo de login/callback agora respeita roles:
+  - `financial` -> `/financial-center`
+  - `accountant` -> `/reports/dre`
+  - `viewer`, `owner`, `admin` -> `/dashboard`
+- O middleware redireciona `/` e rotas guest-only autenticadas usando o cookie `cf_home_route`, sem importar Prisma no Edge.
+
+Verificacoes executadas na raiz:
+
+```bash
+npm run typecheck
+npm run test
+npm run lint
+npm run build
+```
+
+Resultado:
+
+- Typecheck: OK.
+- Testes: OK, 16 arquivos e 146 testes passando.
+- Lint: OK.
+- Build: OK, incluindo `prisma generate && next build`.
+- As novas rotas de API apareceram como dinamicas no build.
+
+Observacoes:
+
+- O dashboard server-side manteve a protecao de autenticacao/onboarding ja existente e renderiza o novo componente cliente apenas apos empresa/configuracao basica valida.
+- A Central Financeira usa valores originais por item e totais convertidos na moeda-base da empresa.
+- Nao foram commitados segredos; `.env.local` continua ignorado.
+
+---
+
 ## Atualizacao mais recente - Supabase conectado 2026-06-27
 
 Solicitacao operacional: configurar/conectar o projeto ao Supabase, resetar banco conforme schema atual, atualizar handoff, commitar e enviar `main`.
