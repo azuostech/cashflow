@@ -31,13 +31,27 @@ Copie `.env.example` para `.env.local` e configure:
 ```text
 DATABASE_URL=
 DIRECT_URL=
+SUPABASE_URL=
+SUPABASE_PUBLISHABLE_KEY=
+SUPABASE_SECRET_KEY=
+SUPABASE_JWKS_URL=
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 NEXT_PUBLIC_APP_URL=
 ```
 
 Importante: se a senha do banco tiver caracteres especiais (`@`, `#`, `]`, etc.), use a senha percent-encoded dentro de `DATABASE_URL` e `DIRECT_URL`.
+
+Use `NEXT_PUBLIC_SUPABASE_ANON_KEY` ou `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, conforme o nome exibido no painel do Supabase. Para rotas server-side com `@supabase/server`, configure tambem `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY` e `SUPABASE_JWKS_URL` no ambiente local/Vercel. Nunca comite `SUPABASE_SECRET_KEY`.
+
+Helpers locais:
+
+```ts
+import { createSupabaseContext } from '@/lib/supabase/context';
+import { withSupabase } from '@/lib/supabase/with-supabase';
+```
 
 ## Scripts
 

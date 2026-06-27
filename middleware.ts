@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import type { CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { getSupabasePublicKey, getSupabaseUrl } from './lib/supabase/env';
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
@@ -15,10 +16,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next({ request });
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseUrl = getSupabaseUrl();
+  const supabasePublicKey = getSupabasePublicKey();
 
-  if (!supabaseUrl || !supabaseAnonKey) {
+  if (!supabaseUrl || !supabasePublicKey) {
     if (!isPublicRoute) {
       const loginUrl = new URL('/login', request.url);
       loginUrl.searchParams.set('redirect', pathname);
@@ -32,7 +33,7 @@ export async function middleware(request: NextRequest) {
 
   const supabase = createServerClient(
     supabaseUrl,
-    supabaseAnonKey,
+    supabasePublicKey,
     {
       cookies: {
         getAll() {

@@ -1,5 +1,68 @@
 # Handoff - CashFlowAI como projeto raiz
 
+## Atualizacao mais recente - Supabase conectado 2026-06-27
+
+Solicitacao operacional: configurar/conectar o projeto ao Supabase, resetar banco conforme schema atual, atualizar handoff, commitar e enviar `main`.
+
+Codigo entregue:
+
+- Instalado `@supabase/server@1.2.0`.
+- Atualizado `@supabase/supabase-js` para `^2.108.2`.
+- Criados helpers server-side:
+  - `lib/supabase/env.ts`
+  - `lib/supabase/server-env.ts`
+  - `lib/supabase/context.ts`
+  - `lib/supabase/with-supabase.ts`
+- Helpers existentes `lib/supabase/client.ts`, `lib/supabase/server.ts`, `middleware.ts` e `app/api/auth/callback/route.ts` agora aceitam `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` alem de `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+- `.env.example` e `README.md` documentam variaveis novas do SDK server-side:
+  - `SUPABASE_URL`
+  - `SUPABASE_PUBLISHABLE_KEY`
+  - `SUPABASE_SECRET_KEY`
+  - `SUPABASE_JWKS_URL`
+
+Banco Supabase:
+
+- `DATABASE_URL`/`DIRECT_URL` locais foram ajustadas em `.env.local` para o pooler Supabase `aws-1-us-east-2.pooler.supabase.com:5432`.
+- `.env.local` continua ignorado e nao deve ser commitado.
+- Usuario autorizou apagar tudo e recriar do zero.
+- Executado `npx prisma db push --force-reset` no schema `public`.
+- Executado `npm run db:seed`.
+- Executado `psql "$DIRECT_URL" -f supabase/migrations/006_reconciliation_rls.sql`.
+
+Resultado no banco:
+
+- 27 tabelas em `public`.
+- Seed base:
+  - `currencies`: 3 registros.
+  - `bank_providers`: 12 registros.
+  - `dre_nodes`: 30 registros.
+- Policies RLS criadas:
+  - `reconciliations_via_role`
+  - `recon_suggestions_via_role`
+- Seed do `Mercury ImportMapping` foi pulado porque ainda nao existe empresa/usuario inicial.
+
+Verificacoes executadas na raiz:
+
+```bash
+npm run typecheck
+npm run build
+```
+
+Resultado:
+
+- Typecheck: OK.
+- Build: OK.
+
+Pendencias operacionais:
+
+- Configurar no Vercel as mesmas variaveis do `.env.local`, sem commitar segredos.
+- Criar/validar buckets privados de Storage usados pelo app, se ainda nao existirem:
+  - `cashflowai-attachments`
+  - `cashflowai-statements`
+- Fazer o primeiro onboarding/cadastro para criar empresa/usuario e, depois disso, recriar seed complementar se necessario.
+
+---
+
 ## Atualizacao mais recente - sync main 2026-06-25
 
 Solicitacao operacional: atualizar handoff, commitar e enviar `main` para `origin`.

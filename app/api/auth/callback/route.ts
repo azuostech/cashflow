@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import type { CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
+import { requireSupabaseConfig } from '@/lib/supabase/env';
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
@@ -12,9 +13,10 @@ export async function GET(request: Request) {
 
   if (code) {
     const cookieStore = cookies();
+    const { supabaseUrl, supabasePublicKey } = requireSupabaseConfig();
     const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      supabaseUrl,
+      supabasePublicKey,
       {
         cookies: {
           getAll() {
