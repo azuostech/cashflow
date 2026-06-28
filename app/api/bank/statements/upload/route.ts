@@ -3,13 +3,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { computeFileHash, detectColumns } from '@/lib/parsers/csv-xlsx';
 import { getSessionContext, isSessionError } from '@/lib/session';
+import { STATEMENTS_BUCKET } from '@/lib/supabase/buckets';
 import { createClient } from '@/lib/supabase/server';
 
 export const runtime = 'nodejs';
 
 const MAX_SIZE = 50 * 1024 * 1024;
 const ALLOWED_EXTS = ['.ofx', '.csv', '.xlsx', '.xls'];
-const STATEMENTS_BUCKET = 'cashflowai-statements';
 
 function getExtension(filename: string): string {
   const ext = filename.split('.').pop()?.toLowerCase();
@@ -64,7 +64,9 @@ export async function POST(request: NextRequest) {
     where: { bankAccountId, fileHash }
   });
 
-  if (existing) {
+  const retryStorageError = existing?.status === 'storage_error' ? existing : null;
+
+  if (existing && !retryStorageError) {
     return NextResponse.json(
       {
         error: 'duplicate',
@@ -106,24 +108,34 @@ export async function POST(request: NextRequest) {
     upsert: false
   });
 
-  const statement = await prisma.bankStatement.create({
-    data: {
-      companyId: session.companyId,
-      bankAccountId,
-      source,
-      bankProviderId: account.bankProviderId ?? null,
-      importMappingId: importMapping?.id ?? null,
-      filename: file.name,
-      fileHash,
-      rawFileUrl: storagePath,
-      currency: account.currency,
-      periodStart: new Date(),
-      periodEnd: new Date(),
-      status: uploadError ? 'storage_error' : 'pending',
-      errorMessage: uploadError?.message ?? null,
-      importedById: session.userId
-    }
-  });
+  const statementData = {
+    companyId: session.companyId,
+    bankAccountId,
+    source,
+    bankProviderId: account.bankProviderId ?? null,
+    importMappingId: importMapping?.id ?? null,
+    filename: file.name,
+    fileHash,
+    rawFileUrl: storagePath,
+    currency: account.currency,
+    periodStart: new Date(),
+    periodEnd: new Date(),
+    totalMoves: 0,
+    totalDuplicates: 0,
+    totalErrors: 0,
+    status: uploadError ? 'storage_error' : 'pending',
+    errorMessage: uploadError?.message ?? null,
+    importedById: session.userId
+  };
+
+  const statement = retryStorageError
+    ? await prisma.bankStatement.update({
+        where: { id: retryStorageError.id },
+        data: { ...statementData, importedAt: new Date() }
+      })
+    : await prisma.bankStatement.create({
+        data: statementData
+      });
 
   let detectedColumns: string[] = [];
   if (source !== StatementSource.file_ofx) {

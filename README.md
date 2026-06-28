@@ -76,6 +76,18 @@ RLS adicional da conciliacao bancaria:
 supabase/migrations/006_reconciliation_rls.sql
 ```
 
+Buckets privados do Storage usados por anexos e importacao de extratos:
+
+```text
+supabase/migrations/007_storage_buckets.sql
+```
+
+Para aplicar manualmente em um projeto Supabase ja existente:
+
+```bash
+psql "$DIRECT_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/007_storage_buckets.sql
+```
+
 ## Deploy
 
 O projeto esta pronto para deploy como app raiz em GitHub/Vercel. Configure as variaveis de ambiente acima no Vercel antes do deploy de producao.

@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
+import { ATTACHMENTS_BUCKET } from '@/lib/supabase/buckets';
 import { createClient } from '@/lib/supabase/server';
 
-export const ATTACHMENTS_BUCKET = 'cashflowai-attachments';
 export const MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024;
 
 export interface UploadResult {

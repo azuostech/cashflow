@@ -13,12 +13,11 @@ import { type ImportMappingConfig, parseCSVContent, parseXLSX } from '@/lib/pars
 import { parseOFX } from '@/lib/parsers/ofx';
 import type { ParsedMove } from '@/lib/parsers/types';
 import { getSessionContext, isSessionError } from '@/lib/session';
+import { STATEMENTS_BUCKET } from '@/lib/supabase/buckets';
 import { createClient } from '@/lib/supabase/server';
 import { createAuditLog } from '@/lib/utils/audit';
 
 export const runtime = 'nodejs';
-
-const STATEMENTS_BUCKET = 'cashflowai-statements';
 
 const inlineMappingSchema = z.object({
   dateColumn: z.string().min(1),
