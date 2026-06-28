@@ -10,7 +10,7 @@ import { OnboardingStep4Categories } from '@/components/onboarding/step4-categor
 
 const STEPS = [
   { label: 'Empresa' },
-  { label: 'Contas' },
+  { label: 'Contas e saldos' },
   { label: 'Centros de custo' },
   { label: 'Categorias' }
 ];

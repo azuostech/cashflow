@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { CreditCard } from 'lucide-react';
+import { EmptyState } from '@/components/shared/empty-state';
 import { PayModal } from '@/components/transactions/pay-modal';
 import { StatusBadge } from '@/components/transactions/status-badge';
 import { Button } from '@/components/ui/button';
@@ -117,8 +118,12 @@ export default function ReceivablesPage() {
           <ReceivableSection title="Vence hoje" items={dueToday} tone="warning" onReceive={setReceivingTx} />
           <ReceivableSection title="Proximas" items={upcoming} tone="default" onReceive={setReceivingTx} />
           {transactions.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-gray-200 bg-white py-12 text-center text-sm text-gray-400">
-              Nenhuma receita pendente
+            <div className="rounded-lg border border-dashed border-gray-200 bg-white">
+              <EmptyState
+                icon={<CreditCard className="h-9 w-9" />}
+                title="Nenhuma receita pendente"
+                description="As receitas abertas e vencidas aparecem aqui para recebimento rapido."
+              />
             </div>
           ) : null}
         </>

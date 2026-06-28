@@ -12,10 +12,15 @@ import {
   ReceiptText,
   Settings,
   Tags,
+  UserCircle,
   Users,
   WalletCards,
   Zap
 } from 'lucide-react';
+import { useFetch } from '@/hooks/use-fetch';
+import { useSidebarBadges } from '@/hooks/use-sidebar-badges';
+import { sidebarBadgeColor } from '@/lib/users/profile';
+import { ROLE_LABELS, type AppUserRole } from '@/lib/users/permissions';
 import { cn } from '@/lib/utils/cn';
 
 const navigation = [
@@ -30,8 +35,8 @@ const navigation = [
     title: 'Lancamentos',
     items: [
       { href: '/transactions', label: 'Todos', icon: ReceiptText },
-      { href: '/payables', label: 'A Pagar', icon: CalendarClock },
-      { href: '/receivables', label: 'A Receber', icon: ListChecks }
+      { href: '/payables', label: 'A Pagar', icon: CalendarClock, badgeKey: 'overduePayables' },
+      { href: '/receivables', label: 'A Receber', icon: ListChecks, badgeKey: 'overdueReceivables' }
     ]
   },
   {
@@ -39,7 +44,7 @@ const navigation = [
     items: [
       { href: '/bank/statements', label: 'Extratos', icon: ReceiptText },
       { href: '/bank/statements/import', label: 'Importar Extrato', icon: Landmark },
-      { href: '/bank/reconciliation', label: 'Conciliacao', icon: ListChecks, badge: '12' }
+      { href: '/bank/reconciliation', label: 'Conciliacao', icon: ListChecks, badgeKey: 'unreconciled' }
     ]
   },
   {
@@ -63,8 +68,29 @@ const navigation = [
   }
 ];
 
+interface MeResponse {
+  name: string;
+  email: string;
+  activeRole: AppUserRole;
+}
+
 export function Sidebar() {
   const pathname = usePathname();
+  const badges = useSidebarBadges();
+  const { data: me } = useFetch<MeResponse>('/api/users/me');
+
+  function getBadge(href: string, badgeKey?: string) {
+    if (!badgeKey) return null;
+    const count = badges[badgeKey as keyof typeof badges] ?? 0;
+    if (count <= 0) return null;
+
+    const type = badgeKey === 'overduePayables' ? 'payable' : badgeKey === 'overdueReceivables' ? 'receivable' : 'recon';
+    return {
+      count,
+      className: sidebarBadgeColor(count, type),
+      active: pathname === href || pathname.startsWith(`${href}/`)
+    };
+  }
 
   return (
     <aside className="flex w-72 shrink-0 flex-col bg-gray-900 text-gray-100">
@@ -81,6 +107,7 @@ export function Sidebar() {
               {section.items.map((item) => {
                 const Icon = item.icon;
                 const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                const badge = getBadge(item.href, item.badgeKey);
 
                 return (
                   <Link
@@ -93,9 +120,14 @@ export function Sidebar() {
                   >
                     <Icon className="h-4 w-4" />
                     <span className="flex-1">{item.label}</span>
-                    {item.badge ? (
-                      <span className={cn('rounded-full px-2 py-0.5 text-xs', active ? 'bg-white/20' : 'bg-emerald-500/20 text-emerald-200')}>
-                        {item.badge}
+                    {badge ? (
+                      <span
+                        className={cn(
+                          'min-w-[1.25rem] rounded-full px-1.5 py-0.5 text-center text-xs font-semibold text-white',
+                          badge.active ? 'bg-white/25' : badge.className
+                        )}
+                      >
+                        {badge.count > 99 ? '99+' : badge.count}
                       </span>
                     ) : null}
                   </Link>
@@ -107,13 +139,25 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t border-white/10 p-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white">CF</div>
-          <div>
-            <p className="text-sm font-semibold">Usuario logado</p>
-            <p className="text-xs text-gray-400">owner</p>
+        <Link
+          href="/profile"
+          className={cn(
+            'mb-3 flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition',
+            pathname === '/profile' ? 'bg-white/10 text-white' : 'text-gray-300 hover:bg-white/10 hover:text-white'
+          )}
+        >
+          <UserCircle className="h-4 w-4" />
+          Meu perfil
+        </Link>
+        <Link href="/profile" className="flex items-center gap-3 rounded-md px-3 py-2 transition hover:bg-white/10">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white">
+            {(me?.name ?? me?.email ?? 'CF')[0].toUpperCase()}
           </div>
-        </div>
+          <div>
+            <p className="max-w-[180px] truncate text-sm font-semibold">{me?.name ?? me?.email ?? 'Usuario logado'}</p>
+            <p className="text-xs text-gray-400">{me?.activeRole ? ROLE_LABELS[me.activeRole] : 'Perfil'}</p>
+          </div>
+        </Link>
       </div>
     </aside>
   );

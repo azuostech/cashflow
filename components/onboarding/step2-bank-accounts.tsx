@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { FormField } from '@/components/shared/form-field';
+import { InitialBalanceStep } from '@/components/onboarding/initial-balance-step';
 import {
   onboardingBankAccountSchema,
   type OnboardingBankAccountFormInput,
@@ -190,6 +191,8 @@ export function OnboardingStep2BankAccounts({ onComplete, onBack }: OnboardingSt
         </Button>
       </form>
 
+      {accounts.length > 0 ? <InitialBalanceStep accounts={accounts} onComplete={onComplete} onSkip={onComplete} /> : null}
+
       <div className="mt-6 flex items-center justify-between">
         <Button type="button" variant="ghost" onClick={onBack} className="text-gray-500">
           Voltar
@@ -198,11 +201,6 @@ export function OnboardingStep2BankAccounts({ onComplete, onBack }: OnboardingSt
           {accounts.length === 0 ? (
             <Button type="button" variant="ghost" className="text-gray-500" onClick={() => setShowSkipConfirm(true)}>
               Pular por agora
-            </Button>
-          ) : null}
-          {accounts.length > 0 ? (
-            <Button type="button" onClick={onComplete} className="px-8">
-              Proximo
             </Button>
           ) : null}
         </div>

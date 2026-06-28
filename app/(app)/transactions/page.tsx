@@ -8,6 +8,7 @@ import {
   ChevronRight,
   CreditCard,
   Download,
+  FileText,
   Pencil,
   Plus,
   RotateCcw
@@ -18,6 +19,7 @@ import { StatusBadge } from '@/components/transactions/status-badge';
 import { TransactionForm } from '@/components/transactions/transaction-form';
 import { TransactionTypeBadge } from '@/components/transactions/transaction-type-badge';
 import { Drawer } from '@/components/shared/drawer';
+import { EmptyState } from '@/components/shared/empty-state';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -314,8 +316,13 @@ export default function TransactionsPage() {
               ) : null}
               {!loading && transactions.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="py-12 text-center text-sm text-gray-400">
-                    Nenhum lancamento encontrado
+                  <TableCell colSpan={9}>
+                    <EmptyState
+                      icon={<FileText className="h-9 w-9" />}
+                      title="Nenhum lancamento encontrado"
+                      description={hasFilters ? 'Ajuste os filtros ou limpe a busca para ver outros lancamentos.' : 'Crie o primeiro lancamento da empresa.'}
+                      action={hasFilters ? { label: 'Limpar filtros', onClick: () => setFilters(DEFAULT_FILTERS) } : { label: 'Novo lancamento', onClick: openNew }}
+                    />
                   </TableCell>
                 </TableRow>
               ) : null}

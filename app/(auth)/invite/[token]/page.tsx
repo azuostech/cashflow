@@ -13,6 +13,7 @@ export default function InvitePage() {
   const [status, setStatus] = useState<InviteStatus>('loading');
   const [companyName, setCompanyName] = useState('');
   const [roleName, setRoleName] = useState('');
+  const [redirectTo, setRedirectTo] = useState('/dashboard');
   const [errorMessage, setErrorMessage] = useState('');
 
   const acceptInvite = useCallback(async () => {
@@ -25,13 +26,16 @@ export default function InvitePage() {
     });
 
     if (!response.ok) {
+      const data = (await response.json().catch(() => null)) as { error?: string } | null;
+      setErrorMessage(data?.error ?? '');
       setStatus('error');
       return;
     }
 
-    const data: { companyName: string; role: string } = await response.json();
+    const data: { companyName: string; role: string; redirectTo?: string } = await response.json();
     setCompanyName(data.companyName);
     setRoleName(data.role);
+    setRedirectTo(data.redirectTo ?? '/dashboard');
     setStatus('success');
   }, [token]);
 
@@ -109,7 +113,7 @@ export default function InvitePage() {
       <p className="mb-6 text-sm text-gray-500">
         Voce agora tem acesso a empresa <strong>{companyName}</strong> como <strong>{roleName}</strong>.
       </p>
-      <Button type="button" onClick={() => router.push('/dashboard')}>
+      <Button type="button" onClick={() => router.push(redirectTo)}>
         Ir ao dashboard
       </Button>
     </div>

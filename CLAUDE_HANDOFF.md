@@ -1,5 +1,232 @@
 # Handoff - CashFlowAI como projeto raiz
 
+## Atualizacao mais recente - Etapa 11 Perfil, onboarding final e polimentos MVP 2026-06-28
+
+Solicitacao: implementar o prompt `cashflowai-etapa-11-prompt-codex.md`, manter o codigo validado e atualizar este handoff.
+
+Arquivos principais entregues:
+
+- `app/(app)/profile/page.tsx`
+- `app/api/users/me/route.ts`
+- `app/api/users/me/change-password/route.ts`
+- `app/api/health/route.ts`
+- `app/not-found.tsx`
+- `app/error.tsx`
+- `components/onboarding/initial-balance-step.tsx`
+- `components/onboarding/step2-bank-accounts.tsx`
+- `components/shared/empty-state.tsx`
+- `components/layout/header.tsx`
+- `components/layout/sidebar.tsx`
+- `hooks/use-sidebar-badges.ts`
+- `lib/users/profile.ts`
+- `lib/users/profile.test.ts`
+- `prisma/schema.prisma`
+- `supabase/migrations/011_user_profile_preferences.sql`
+
+Comportamento entregue:
+
+- `/profile` exibe dados do usuario, papel ativo, empresas, locale, timezone, preferencias de notificacao e troca de senha.
+- `PATCH /api/users/me` salva nome, locale, timezone e preferencias, com `AuditLog` em `entityType=user`.
+- `POST /api/users/me/change-password` valida senha e chama `supabase.auth.updateUser({ password })` na sessao atual.
+- `User` ganhou `locale`, `timezone`, `notification_prefs` e `updated_at`.
+- Header ganhou avatar/nome clicavel para `/profile`.
+- Sidebar ganhou link `Meu perfil` e dados reais do usuario no rodape.
+- Sidebar agora exibe badges dinamicos para:
+  - `/payables`: despesas vencidas.
+  - `/receivables`: receitas vencidas.
+  - `/bank/reconciliation`: movimentos nao conciliados.
+- Onboarding step de contas ganhou sub-step de saldo inicial por conta, usando `PATCH /api/bank-accounts/[id]`.
+- `app/not-found.tsx` e `app/error.tsx` foram criados.
+- `GET /api/health` agora retorna checks de `db`, `storage`, `auth`, `details`, `elapsed` e status `503` quando algum check obrigatorio falha.
+- `components/shared/empty-state.tsx` foi criado e aplicado em:
+  - `/transactions`
+  - `/payables`
+  - `/receivables`
+  - `/bank/reconciliation`
+  - `/bank/statements`
+
+Adaptacoes importantes ao prompt:
+
+- O schema atual nao tinha campos de perfil alem de nome/email; foi criada a migration `011_user_profile_preferences.sql` para suportar timezone, locale e preferencias.
+- `ROLE_LABELS` no projeto e `Record<UserRole, string>`, nao objeto com cor. A pagina `/profile` usa estilos locais por papel.
+- O step de contas do onboarding ja aceitava saldo inicial ao criar cada conta. O novo `InitialBalanceStep` foi adicionado como revisao/ajuste final de todos os saldos antes de avancar.
+- O health check de Storage usa client admin via service key; se a chave nao existir, o check fica `skip`, conforme nota do prompt.
+
+Migration aplicada no Supabase remoto desta rodada:
+
+```bash
+psql "$DIRECT_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/011_user_profile_preferences.sql
+```
+
+Validacao remota executada:
+
+- `public.users` possui `locale`, `timezone`, `notification_prefs` e `updated_at`.
+
+Verificacoes executadas na raiz:
+
+```bash
+npx prisma format
+npx prisma generate
+npm run typecheck
+npm run test
+npm run lint
+npm run build
+curl -sS http://localhost:3001/api/health
+```
+
+Resultado:
+
+- Prisma format/generate: OK.
+- Typecheck: OK.
+- Testes: OK, 19 arquivos e 172 testes passando.
+- Lint: OK, sem warnings ou erros.
+- Build: OK, incluindo `/profile`, `/api/users/me/change-password`, pagina 404 e pagina de erro.
+- Health local: OK com `db`, `storage` e `auth` em `ok`.
+
+Validacao manual recomendada:
+
+1. Abrir `/profile`, editar nome/timezone/preferencias e salvar.
+2. Testar troca de senha com senha invalida e valida.
+3. Clicar no avatar/nome do header e no link `Meu perfil` da sidebar.
+4. Abrir `/rota-inexistente` e validar a pagina 404.
+5. Validar badges na sidebar quando houver vencidos/nao conciliados.
+6. Passar pelo onboarding de contas e confirmar o sub-step de saldos iniciais.
+
+---
+
+## Atualizacao mais recente - Etapa 10 Usuarios, convites e auditoria 2026-06-27
+
+Solicitacao: implementar o prompt `cashflowai-etapa-10-prompt-codex.md`, manter o codigo validado e atualizar este handoff.
+
+Arquivos principais entregues:
+
+- `lib/users/permissions.ts`
+- `lib/users/permissions.test.ts`
+- `lib/supabase/admin.ts`
+- `lib/audit-logs/query.ts`
+- `app/api/users/me/route.ts`
+- `app/api/companies/[id]/users/route.ts`
+- `app/api/companies/[id]/invites/route.ts`
+- `app/api/companies/[id]/users/[userId]/role/route.ts`
+- `app/api/companies/[id]/users/[userId]/route.ts`
+- `app/api/session/switch-company/route.ts`
+- `app/api/audit-logs/route.ts`
+- `app/api/audit-logs/export/route.ts`
+- `app/api/invites/accept/route.ts`
+- `app/(auth)/invite/[token]/page.tsx`
+- `app/(app)/settings/users/page.tsx`
+- `app/(app)/settings/audit/page.tsx`
+- `components/layout/header.tsx`
+- `prisma/schema.prisma`
+- `supabase/migrations/010_user_company_invites.sql`
+
+Comportamento entregue:
+
+- Centralizacao das regras de permissao para `owner`, `admin`, `financial`, `accountant` e `viewer`.
+- `owner` pode convidar/gerenciar todos os papeis, com protecao para nao remover/rebaixar o ultimo `owner`.
+- `admin` pode convidar e gerenciar apenas `financial`, `accountant` e `viewer`.
+- `GET /api/users/me` retorna usuario autenticado, empresa ativa, papel ativo e empresas disponiveis.
+- `POST /api/session/switch-company` troca a empresa ativa, atualiza `cf_active_company`/`cf_home_route` e retorna a rota inicial do papel.
+- Header exibe seletor de empresa quando o usuario possui acesso ativo a 2+ empresas.
+- `/settings/users` substitui placeholder por tela de membros:
+  - convite por email e papel;
+  - link manual do convite quando email nao for enviado;
+  - listagem de membros/convites;
+  - troca de papel;
+  - remocao de membro ou cancelamento de convite pendente.
+- Convites criam `UserCompanyRole` pendente (`active=false`, `acceptedAt=null`) para impedir acesso antes do aceite.
+- Para emails ainda sem usuario local, a API cria um usuario placeholder inativo e, no aceite, reassocia o papel ao `auth.user.id` real.
+- `POST /api/invites/accept` aceita token de convite, atualiza cookies de empresa/rota e retorna `redirectTo`.
+- Auditoria ganhou filtros por acao, entidade, periodo e busca textual.
+- `GET /api/audit-logs/export` exporta CSV usando os mesmos filtros da tela.
+
+Adaptacoes importantes ao prompt:
+
+- O schema existente tinha `invitedAt` e `acceptedAt`, mas nao tinha `invitedById`, `inviteEmail`, `createdAt` e `updatedAt` em `UserCompanyRole`; estes campos foram adicionados.
+- O prompt citava `inviteAcceptedAt`; a API expõe esse nome mapeando para o campo existente `acceptedAt`.
+- `AuditAction` nao possui `invite`; convites usam auditoria `create`, mudancas de papel usam `update` e remocoes/cancelamentos usam `revoke`.
+- O envio de email via Supabase Admin e best-effort: se `SUPABASE_SECRET_KEY`/`SUPABASE_SERVICE_ROLE_KEY` nao estiver configurada ou o envio falhar, o convite continua registrado e a API retorna `inviteUrl` para envio manual.
+
+Migration aplicada no Supabase remoto desta rodada:
+
+```bash
+psql "$DIRECT_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/010_user_company_invites.sql
+```
+
+Validacao remota executada:
+
+- `public.user_company_roles` possui `invited_by`, `invite_email`, `created_at` e `updated_at`.
+
+Verificacoes executadas na raiz:
+
+```bash
+npx prisma format
+npx prisma generate
+npm run typecheck
+npm run test
+npm run lint
+npm run build
+```
+
+Resultado:
+
+- Prisma format/generate: OK.
+- Typecheck: OK.
+- Testes: OK, 18 arquivos e 162 testes passando.
+- Lint: OK, sem warnings ou erros.
+- Build: OK, incluindo as novas rotas de usuarios, convites, switch de empresa e exportacao de auditoria.
+
+Validacao manual recomendada:
+
+1. Abrir `/settings/users` como `owner`.
+2. Convidar um email novo como `financial` e confirmar que fica `Pendente`.
+3. Copiar o link manual e aceitar o convite autenticado com o email convidado.
+4. Confirmar que a empresa ativa muda e o novo membro aparece como `Ativo`.
+5. Alterar papel e remover um membro nao-owner.
+6. Confirmar que o ultimo `owner` nao pode ser removido/rebaixado.
+7. Abrir `/settings/audit`, filtrar por `user_company_role` e exportar CSV.
+
+---
+
+## Atualizacao operacional - Storage de extratos e parsers OFX 2026-06-27
+
+Contexto:
+
+- Ao importar OFX, a tela ainda exibiu `Storage retornou: Bucket not found`.
+- Este erro acontece antes do parser OFX rodar: o upload tenta gravar o arquivo no bucket privado `cashflowai-statements`.
+- O codigo possui a migration de criacao/validacao dos buckets e policies:
+  - `supabase/migrations/007_storage_buckets.sql`
+- A migration foi aplicada no Supabase remoto nesta rodada com `psql "$DIRECT_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/007_storage_buckets.sql`.
+- Apos isso surgiu um segundo erro no upload: `permission denied for table user_company_roles`, causado pelas policies de `storage.objects` consultando diretamente `public.user_company_roles`.
+- Foi criada e aplicada a migration:
+  - `supabase/migrations/009_storage_policy_company_access_helper.sql`
+- Essa migration cria `public.cashflowai_user_has_company_access(company_id_text text)` como `SECURITY DEFINER` e troca as policies de Storage para usarem esse helper.
+
+Validacao executada no Supabase:
+
+- `cashflowai-statements`: existe e esta privado (`public = false`).
+- `cashflowai-attachments`: existe e esta privado (`public = false`).
+- `public.cashflowai_user_has_company_access` existe com `security_type = DEFINER`.
+- `authenticated` possui `EXECUTE` nessa funcao.
+- Policies `cashflowai_storage_select`, `cashflowai_storage_insert`, `cashflowai_storage_update` e `cashflowai_storage_delete` existem em `storage.objects` e usam `cashflowai_user_has_company_access`.
+
+Validacao esperada apos aplicar:
+
+1. Reimportar o mesmo OFX.
+2. Confirmar que o aviso `Bucket not found` desaparece.
+3. Prosseguir para `Confirmar importacao`.
+4. Se o arquivo anterior ficou preso em `storage_error`, o endpoint de upload ja permite retry e reaproveita o registro.
+
+Necessidade futura para arquitetura:
+
+- Avaliar formalmente a cobertura do parser OFX por banco.
+- O parser atual reconhece `BANKID` do Inter (`077`) e outros bancos comuns, e suporta OFX SGML com `<STMTTRN>`, `<DTPOSTED>`, `<TRNAMT>`, `<FITID>`, `<MEMO>/<NAME>`, decimal com ponto ou virgula e tags sem fechamento.
+- Hoje existem testes unitarios para Bradesco e Itau, mas ainda nao ha fixtures reais/anônimas do Inter e demais bancos.
+- Recomendacao para analise posterior: criar uma matriz de fixtures OFX por banco (Inter, Itau, Bradesco, Banco do Brasil, Santander, Nubank, Caixa, Sicredi), validando quantidade de movimentos, datas, tipo debito/credito, valor, descricao, `FITID`, conta/banco detectados e linhas de saldo ignoradas.
+- Esta analise de parsers OFX fica como step posterior para o arquiteto de software, nao tratada nesta rodada.
+
+---
+
 ## Atualizacao mais recente - Etapa 09 Fechamento Mensal 2026-06-27
 
 Solicitacao: implementar o prompt `cashflowai-etapa-09-prompt-codex.md`, manter o codigo validado e atualizar este handoff.

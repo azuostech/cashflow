@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { buildAuditLogWhere, parseAuditLimit } from '@/lib/audit-logs/query';
 import { prisma } from '@/lib/prisma';
 import { getSessionContext, isSessionError } from '@/lib/session';
 
@@ -7,17 +8,13 @@ export async function GET(request: NextRequest) {
   if (isSessionError(session)) return session;
 
   const { searchParams } = new URL(request.url);
-  const entityType = searchParams.get('entityType');
-  const limit = Math.min(Number(searchParams.get('limit') ?? 50), 100);
+  const limit = parseAuditLimit(searchParams);
 
   const logs = await prisma.auditLog.findMany({
-    where: {
-      companyId: session.companyId,
-      ...(entityType ? { entityType } : {})
-    },
+    where: buildAuditLogWhere(session.companyId, searchParams),
     include: { user: { select: { id: true, name: true, email: true } } },
     orderBy: { createdAt: 'desc' },
-    take: Number.isFinite(limit) ? limit : 50
+    take: limit
   });
 
   return NextResponse.json(logs);

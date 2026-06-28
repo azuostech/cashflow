@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { FileText, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { EmptyState } from '@/components/shared/empty-state';
 import { Button } from '@/components/ui/button';
 import { useFetch } from '@/hooks/use-fetch';
 import { formatDate } from '@/lib/utils/date';
@@ -129,9 +130,11 @@ export default function BankStatementsPage() {
               {!loading && list.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-4 py-12 text-center">
-                    <FileText className="mx-auto mb-3 h-8 w-8 text-gray-300" />
-                    <p className="text-sm font-medium text-gray-700">Nenhum extrato importado</p>
-                    <p className="mt-1 text-xs text-gray-400">Use a importacao para criar movimentos bancarios.</p>
+                    <EmptyState
+                      icon={<FileText className="h-9 w-9" />}
+                      title="Nenhum extrato importado"
+                      description="Use a importacao para criar movimentos bancarios e iniciar a conciliacao."
+                    />
                   </td>
                 </tr>
               ) : null}

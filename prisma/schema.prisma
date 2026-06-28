@@ -207,9 +207,9 @@ model Currency {
 
   companies         Company[]
   bankAccounts      BankAccount[]
-  transactions      Transaction[] @relation("TransactionOriginalCurrency")
-  installments      Installment[] @relation("InstallmentOriginalCurrency")
-  bankMoves         BankMove[] @relation("BankMoveOriginalCurrency")
+  transactions      Transaction[]  @relation("TransactionOriginalCurrency")
+  installments      Installment[]  @relation("InstallmentOriginalCurrency")
+  bankMoves         BankMove[]     @relation("BankMoveOriginalCurrency")
   exchangeRatesFrom ExchangeRate[] @relation("ExchangeRateFrom")
   exchangeRatesTo   ExchangeRate[] @relation("ExchangeRateTo")
 
@@ -253,17 +253,22 @@ model Company {
 }
 
 model User {
-  id          String    @id @db.Uuid
-  email       String    @unique @db.VarChar(255)
-  name        String    @db.VarChar(200)
-  avatarUrl   String?   @map("avatar_url")
-  phone       String?   @db.VarChar(20)
-  active      Boolean   @default(true)
-  lastLoginAt DateTime? @map("last_login_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
+  id                String    @id @db.Uuid
+  email             String    @unique @db.VarChar(255)
+  name              String    @db.VarChar(200)
+  avatarUrl         String?   @map("avatar_url")
+  phone             String?   @db.VarChar(20)
+  locale            String    @default("pt-BR") @db.VarChar(10)
+  timezone          String    @default("America/Sao_Paulo") @db.VarChar(50)
+  notificationPrefs Json?     @map("notification_prefs")
+  active            Boolean   @default(true)
+  lastLoginAt       DateTime? @map("last_login_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at")
 
   companyRoles        UserCompanyRole[]
-  createdTransactions Transaction[] @relation("TransactionCreatedBy")
+  invitedCompanyRoles UserCompanyRole[]  @relation("InvitedCompanyRoles")
+  createdTransactions Transaction[]      @relation("TransactionCreatedBy")
   auditLogs           AuditLog[]
   closedPeriods       AccountingPeriod[] @relation("ClosedBy")
   reopenedPeriods     AccountingPeriod[] @relation("ReopenedBy")
@@ -273,19 +278,25 @@ model User {
 }
 
 model UserCompanyRole {
-  id         String    @id @default(uuid()) @db.Uuid
-  userId     String    @map("user_id") @db.Uuid
-  companyId  String    @map("company_id") @db.Uuid
-  role       UserRole
-  active     Boolean   @default(true)
-  invitedAt  DateTime? @map("invited_at")
-  acceptedAt DateTime? @map("accepted_at")
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  companyId   String    @map("company_id") @db.Uuid
+  invitedById String?   @map("invited_by") @db.Uuid
+  inviteEmail String?   @map("invite_email") @db.VarChar(255)
+  role        UserRole
+  active      Boolean   @default(true)
+  invitedAt   DateTime? @map("invited_at")
+  acceptedAt  DateTime? @map("accepted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
 
-  user    User    @relation(fields: [userId], references: [id])
-  company Company @relation(fields: [companyId], references: [id])
+  user      User    @relation(fields: [userId], references: [id])
+  company   Company @relation(fields: [companyId], references: [id])
+  invitedBy User?   @relation("InvitedCompanyRoles", fields: [invitedById], references: [id])
 
   @@unique([userId, companyId])
   @@index([companyId])
+  @@index([invitedById])
   @@map("user_company_roles")
 }
 
@@ -338,13 +349,13 @@ model BankAccount {
   createdAt                     DateTime        @default(now()) @map("created_at")
   updatedAt                     DateTime        @updatedAt @map("updated_at")
 
-  company          Company         @relation(fields: [companyId], references: [id])
-  bankProvider     BankProvider?   @relation(fields: [bankProviderId], references: [id])
-  currencyRef      Currency        @relation(fields: [currency], references: [code])
+  company          Company          @relation(fields: [companyId], references: [id])
+  bankProvider     BankProvider?    @relation(fields: [bankProviderId], references: [id])
+  currencyRef      Currency         @relation(fields: [currency], references: [code])
   statements       BankStatement[]
   bankMoves        BankMove[]
-  transactions     Transaction[] @relation("TransactionBankAccount")
-  transactionsDest Transaction[] @relation("TransactionDestBankAccount")
+  transactions     Transaction[]    @relation("TransactionBankAccount")
+  transactionsDest Transaction[]    @relation("TransactionDestBankAccount")
   installments     Installment[]
   connections      BankConnection[]
 
@@ -363,9 +374,9 @@ model CostCenter {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  company      Company @relation(fields: [companyId], references: [id])
-  parent       CostCenter? @relation("CostCenterHierarchy", fields: [parentId], references: [id])
-  children     CostCenter[] @relation("CostCenterHierarchy")
+  company      Company                      @relation(fields: [companyId], references: [id])
+  parent       CostCenter?                  @relation("CostCenterHierarchy", fields: [parentId], references: [id])
+  children     CostCenter[]                 @relation("CostCenterHierarchy")
   transactions Transaction[]
   installments Installment[]
   splits       TransactionCostCenterSplit[]
@@ -389,9 +400,9 @@ model DRENode {
   active     Boolean     @default(true)
   isGlobal   Boolean     @default(false) @map("is_global")
 
-  company    Company? @relation(fields: [companyId], references: [id])
-  parent     DRENode? @relation("DREHierarchy", fields: [parentId], references: [id])
-  children   DRENode[] @relation("DREHierarchy")
+  company    Company?   @relation(fields: [companyId], references: [id])
+  parent     DRENode?   @relation("DREHierarchy", fields: [parentId], references: [id])
+  children   DRENode[]  @relation("DREHierarchy")
   categories Category[]
 
   @@index([companyId])
@@ -415,10 +426,10 @@ model Category {
   createdAt     DateTime        @default(now()) @map("created_at")
   updatedAt     DateTime        @updatedAt @map("updated_at")
 
-  company      Company @relation(fields: [companyId], references: [id])
-  dreNode      DRENode @relation(fields: [dreNodeId], references: [id])
-  parent       Category? @relation("CategoryHierarchy", fields: [parentId], references: [id])
-  children     Category[] @relation("CategoryHierarchy")
+  company      Company       @relation(fields: [companyId], references: [id])
+  dreNode      DRENode       @relation(fields: [dreNodeId], references: [id])
+  parent       Category?     @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children     Category[]    @relation("CategoryHierarchy")
   transactions Transaction[]
   installments Installment[]
 
@@ -440,7 +451,7 @@ model Contact {
   createdAt DateTime    @default(now()) @map("created_at")
   updatedAt DateTime    @updatedAt @map("updated_at")
 
-  company      Company @relation(fields: [companyId], references: [id])
+  company      Company       @relation(fields: [companyId], references: [id])
   transactions Transaction[]
 
   @@index([companyId])
@@ -468,9 +479,9 @@ model AccountingPeriod {
   createdAt        DateTime               @default(now()) @map("created_at")
   updatedAt        DateTime               @updatedAt @map("updated_at")
 
-  company      Company @relation(fields: [companyId], references: [id])
-  closedBy     User? @relation("ClosedBy", fields: [closedById], references: [id])
-  reopenedBy   User? @relation("ReopenedBy", fields: [reopenedById], references: [id])
+  company      Company       @relation(fields: [companyId], references: [id])
+  closedBy     User?         @relation("ClosedBy", fields: [closedById], references: [id])
+  reopenedBy   User?         @relation("ReopenedBy", fields: [reopenedById], references: [id])
   transactions Transaction[]
   installments Installment[]
 
@@ -565,21 +576,21 @@ model Transaction {
   updatedAt             DateTime             @updatedAt @map("updated_at")
   deletedAt             DateTime?            @map("deleted_at")
 
-  company             Company @relation(fields: [companyId], references: [id])
-  category            Category? @relation(fields: [categoryId], references: [id])
-  costCenter          CostCenter? @relation(fields: [costCenterId], references: [id])
-  bankAccount         BankAccount? @relation("TransactionBankAccount", fields: [bankAccountId], references: [id])
-  destBankAccount     BankAccount? @relation("TransactionDestBankAccount", fields: [destBankAccountId], references: [id])
-  contact             Contact? @relation(fields: [contactId], references: [id])
-  accountingPeriod    AccountingPeriod? @relation(fields: [accountingPeriodId], references: [id])
-  recurrenceRule      RecurrenceRule? @relation(fields: [recurrenceRuleId], references: [id])
-  createdBy           User @relation("TransactionCreatedBy", fields: [createdById], references: [id])
-  originalCurrencyRef Currency @relation("TransactionOriginalCurrency", fields: [originalCurrency], references: [code])
-  installments        Installment[]
-  costCenterSplits    TransactionCostCenterSplit[]
-  reconciliations     Reconciliation[]
+  company                   Company                      @relation(fields: [companyId], references: [id])
+  category                  Category?                    @relation(fields: [categoryId], references: [id])
+  costCenter                CostCenter?                  @relation(fields: [costCenterId], references: [id])
+  bankAccount               BankAccount?                 @relation("TransactionBankAccount", fields: [bankAccountId], references: [id])
+  destBankAccount           BankAccount?                 @relation("TransactionDestBankAccount", fields: [destBankAccountId], references: [id])
+  contact                   Contact?                     @relation(fields: [contactId], references: [id])
+  accountingPeriod          AccountingPeriod?            @relation(fields: [accountingPeriodId], references: [id])
+  recurrenceRule            RecurrenceRule?              @relation(fields: [recurrenceRuleId], references: [id])
+  createdBy                 User                         @relation("TransactionCreatedBy", fields: [createdById], references: [id])
+  originalCurrencyRef       Currency                     @relation("TransactionOriginalCurrency", fields: [originalCurrency], references: [code])
+  installments              Installment[]
+  costCenterSplits          TransactionCostCenterSplit[]
+  reconciliations           Reconciliation[]
   reconciliationSuggestions ReconciliationSuggestion[]
-  tags                TransactionTag[]
+  tags                      TransactionTag[]
 
   @@index([companyId, competenceDate])
   @@index([companyId, dueDate])
@@ -617,12 +628,12 @@ model Installment {
   createdAt             DateTime             @default(now()) @map("created_at")
   updatedAt             DateTime             @updatedAt @map("updated_at")
 
-  transaction         Transaction @relation(fields: [transactionId], references: [id])
-  bankAccount         BankAccount? @relation(fields: [bankAccountId], references: [id])
-  costCenter          CostCenter? @relation(fields: [costCenterId], references: [id])
-  category            Category? @relation(fields: [categoryId], references: [id])
+  transaction         Transaction       @relation(fields: [transactionId], references: [id])
+  bankAccount         BankAccount?      @relation(fields: [bankAccountId], references: [id])
+  costCenter          CostCenter?       @relation(fields: [costCenterId], references: [id])
+  category            Category?         @relation(fields: [categoryId], references: [id])
   accountingPeriod    AccountingPeriod? @relation(fields: [accountingPeriodId], references: [id])
-  originalCurrencyRef Currency @relation("InstallmentOriginalCurrency", fields: [originalCurrency], references: [code])
+  originalCurrencyRef Currency          @relation("InstallmentOriginalCurrency", fields: [originalCurrency], references: [code])
   reconciliations     Reconciliation[]
 
   @@index([transactionId])
@@ -642,7 +653,7 @@ model TransactionCostCenterSplit {
   createdAt     DateTime @default(now()) @map("created_at")
 
   transaction Transaction @relation(fields: [transactionId], references: [id])
-  costCenter  CostCenter @relation(fields: [costCenterId], references: [id])
+  costCenter  CostCenter  @relation(fields: [costCenterId], references: [id])
 
   @@index([transactionId])
   @@map("transaction_cost_center_splits")
@@ -676,8 +687,8 @@ model ImportMapping {
   createdAt            DateTime               @default(now()) @map("created_at")
   updatedAt            DateTime               @updatedAt @map("updated_at")
 
-  company      Company @relation(fields: [companyId], references: [id])
-  bankProvider BankProvider? @relation(fields: [bankProviderId], references: [id])
+  company      Company         @relation(fields: [companyId], references: [id])
+  bankProvider BankProvider?   @relation(fields: [bankProviderId], references: [id])
   statements   BankStatement[]
 
   @@index([companyId])
@@ -705,8 +716,8 @@ model BankStatement {
   importedById    String          @map("imported_by") @db.Uuid
   importedAt      DateTime        @default(now()) @map("imported_at")
 
-  company       Company @relation(fields: [companyId], references: [id])
-  bankAccount   BankAccount @relation(fields: [bankAccountId], references: [id])
+  company       Company        @relation(fields: [companyId], references: [id])
+  bankAccount   BankAccount    @relation(fields: [bankAccountId], references: [id])
   importMapping ImportMapping? @relation(fields: [importMappingId], references: [id])
   bankMoves     BankMove[]
 
@@ -744,10 +755,10 @@ model BankMove {
   isPossibleDuplicate   Boolean              @default(false) @map("is_possible_duplicate")
   importedAt            DateTime             @default(now()) @map("imported_at")
 
-  company             Company @relation(fields: [companyId], references: [id])
-  bankStatement       BankStatement @relation(fields: [bankStatementId], references: [id])
-  bankAccount         BankAccount @relation(fields: [bankAccountId], references: [id])
-  originalCurrencyRef Currency @relation("BankMoveOriginalCurrency", fields: [originalCurrency], references: [code])
+  company             Company                    @relation(fields: [companyId], references: [id])
+  bankStatement       BankStatement              @relation(fields: [bankStatementId], references: [id])
+  bankAccount         BankAccount                @relation(fields: [bankAccountId], references: [id])
+  originalCurrencyRef Currency                   @relation("BankMoveOriginalCurrency", fields: [originalCurrency], references: [code])
   reconciliations     Reconciliation[]
   suggestions         ReconciliationSuggestion[]
 
@@ -778,7 +789,7 @@ model Reconciliation {
   adjustmentReason  String?              @map("adjustment_reason")
   adjustmentAmount  Decimal?             @map("adjustment_amount") @db.Decimal(18, 2)
 
-  bankMove    BankMove @relation(fields: [bankMoveId], references: [id])
+  bankMove    BankMove     @relation(fields: [bankMoveId], references: [id])
   transaction Transaction? @relation(fields: [transactionId], references: [id])
   installment Installment? @relation(fields: [installmentId], references: [id])
 
@@ -808,7 +819,7 @@ model ReconciliationSuggestion {
   reviewedById             String?   @map("reviewed_by") @db.Uuid
   createdAt                DateTime  @default(now()) @map("created_at")
 
-  bankMove    BankMove @relation(fields: [bankMoveId], references: [id])
+  bankMove    BankMove     @relation(fields: [bankMoveId], references: [id])
   transaction Transaction? @relation(fields: [transactionId], references: [id])
 
   @@index([bankMoveId])
@@ -835,7 +846,7 @@ model Attachment {
   active          Boolean              @default(true)
 
   company    Company @relation(fields: [companyId], references: [id])
-  uploadedBy User @relation(fields: [uploadedById], references: [id])
+  uploadedBy User    @relation(fields: [uploadedById], references: [id])
 
   @@index([companyId, entityType, entityId])
   @@map("attachments")
@@ -858,7 +869,7 @@ model AuditLog {
   createdAt     DateTime    @default(now()) @map("created_at")
 
   company Company @relation(fields: [companyId], references: [id])
-  user    User? @relation(fields: [userId], references: [id])
+  user    User?   @relation(fields: [userId], references: [id])
 
   @@index([companyId, entityType, entityId])
   @@index([companyId, createdAt])
@@ -873,7 +884,7 @@ model Tag {
   color     String?  @db.Char(7)
   createdAt DateTime @default(now()) @map("created_at")
 
-  company      Company @relation(fields: [companyId], references: [id])
+  company      Company          @relation(fields: [companyId], references: [id])
   transactions TransactionTag[]
 
   @@unique([companyId, name])
@@ -885,7 +896,7 @@ model TransactionTag {
   tagId         String @map("tag_id") @db.Uuid
 
   transaction Transaction @relation(fields: [transactionId], references: [id])
-  tag         Tag @relation(fields: [tagId], references: [id])
+  tag         Tag         @relation(fields: [tagId], references: [id])
 
   @@id([transactionId, tagId])
   @@map("transaction_tags")
@@ -912,8 +923,8 @@ model BankConnection {
   updatedAt             DateTime             @updatedAt @map("updated_at")
   revokedAt             DateTime?            @map("revoked_at")
 
-  bankAccount  BankAccount @relation(fields: [bankAccountId], references: [id])
-  bankProvider BankProvider @relation(fields: [bankProviderId], references: [id])
+  bankAccount  BankAccount   @relation(fields: [bankAccountId], references: [id])
+  bankProvider BankProvider  @relation(fields: [bankProviderId], references: [id])
   syncJobs     BankSyncJob[]
 
   @@index([companyId])

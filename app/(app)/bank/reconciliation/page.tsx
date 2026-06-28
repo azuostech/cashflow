@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Ban, PlusCircle } from 'lucide-react';
+import { Ban, ListChecks, PlusCircle } from 'lucide-react';
 import { BankMoveCard } from '@/components/bank/bank-move-card';
 import { SuggestionCard } from '@/components/bank/suggestion-card';
+import { EmptyState } from '@/components/shared/empty-state';
 import { FormField } from '@/components/shared/form-field';
 import { Modal } from '@/components/shared/modal';
 import { SearchableSelect } from '@/components/shared/searchable-select';
@@ -273,7 +274,11 @@ export default function ReconciliationPage() {
             {loadingMoves ? (
               <div className="py-12 text-center text-sm text-gray-400">Carregando movimentos...</div>
             ) : moves.length === 0 ? (
-              <div className="py-12 text-center text-sm text-gray-400">Nenhum movimento pendente.</div>
+              <EmptyState
+                icon={<ListChecks className="h-9 w-9" />}
+                title="Nenhum movimento pendente"
+                description="Movimentos nao conciliados de extratos importados aparecem aqui."
+              />
             ) : (
               moves.map((move) => (
                 <BankMoveCard key={move.id} move={move} isSelected={selectedMoveId === move.id} onClick={() => handleSelectMove(move.id)} />
