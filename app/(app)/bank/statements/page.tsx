@@ -1,7 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { FileText, Plus, RefreshCw } from 'lucide-react';
+import { FileText, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useFetch } from '@/hooks/use-fetch';
 import { formatDate } from '@/lib/utils/date';
@@ -39,9 +40,43 @@ function statusClass(status: string): string {
   return 'bg-gray-100 text-gray-500';
 }
 
+function formatApiError(payload: unknown): string {
+  if (typeof payload === 'string') return payload;
+  if (payload && typeof payload === 'object') {
+    const error = (payload as { error?: unknown }).error;
+    if (typeof error === 'string') return error;
+  }
+  return 'Nao foi possivel excluir o extrato.';
+}
+
 export default function BankStatementsPage() {
-  const { data: statements, loading, error, refetch } = useFetch<StatementHistory[]>('/api/bank/statements?limit=100');
+  const { data: statements, loading, error: loadError, refetch } = useFetch<StatementHistory[]>('/api/bank/statements?limit=100');
+  const [actionError, setActionError] = useState('');
+  const [deletingStatementId, setDeletingStatementId] = useState<string | null>(null);
   const list = statements ?? [];
+
+  async function handleDeleteStatement(statement: StatementHistory) {
+    const filename = statement.filename ?? 'este extrato';
+    const confirmed = window.confirm(
+      `Excluir "${filename}"? Os movimentos importados por este arquivo tambem serao removidos.`
+    );
+    if (!confirmed) return;
+
+    setActionError('');
+    setDeletingStatementId(statement.id);
+
+    const response = await fetch(`/api/bank/statements/${statement.id}`, { method: 'DELETE' });
+    const data = await response.json().catch(() => ({}));
+
+    setDeletingStatementId(null);
+
+    if (!response.ok) {
+      setActionError(formatApiError(data));
+      return;
+    }
+
+    await refetch();
+  }
 
   return (
     <div>
@@ -65,11 +100,12 @@ export default function BankStatementsPage() {
         </div>
       </div>
 
-      {error ? <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
+      {loadError ? <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{loadError}</div> : null}
+      {actionError ? <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{actionError}</div> : null}
 
       <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
         <div className="overflow-x-auto">
-          <table className="min-w-[960px] w-full text-sm">
+          <table className="min-w-[1040px] w-full text-sm">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-400">Arquivo</th>
@@ -79,19 +115,20 @@ export default function BankStatementsPage() {
                 <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-gray-400">Duplicatas</th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-400">Mapeamento</th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-gray-400">Status</th>
+                <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-gray-400">Acoes</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-sm text-gray-400">
+                  <td colSpan={8} className="px-4 py-12 text-center text-sm text-gray-400">
                     Carregando extratos...
                   </td>
                 </tr>
               ) : null}
               {!loading && list.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center">
+                  <td colSpan={8} className="px-4 py-12 text-center">
                     <FileText className="mx-auto mb-3 h-8 w-8 text-gray-300" />
                     <p className="text-sm font-medium text-gray-700">Nenhum extrato importado</p>
                     <p className="mt-1 text-xs text-gray-400">Use a importacao para criar movimentos bancarios.</p>
@@ -121,6 +158,22 @@ export default function BankStatementsPage() {
                           {statusLabel(statement.status)}
                         </span>
                         {statement.errorMessage ? <p className="mt-1 max-w-xs truncate text-xs text-red-500">{statement.errorMessage}</p> : null}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          type="button"
+                          disabled={deletingStatementId === statement.id}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-300 transition hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
+                          onClick={() => void handleDeleteStatement(statement)}
+                          aria-label="Excluir extrato importado"
+                          title="Excluir extrato importado"
+                        >
+                          {deletingStatementId === statement.id ? (
+                            <RefreshCw className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </button>
                       </td>
                     </tr>
                   ))

@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, FileText, RefreshCw, UploadCloud } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, FileText, RefreshCw, Trash2, UploadCloud } from 'lucide-react';
 import { FormField } from '@/components/shared/form-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -133,6 +133,7 @@ export default function BankStatementImportPage() {
   const [exchangeRate, setExchangeRate] = useState('');
   const [exchangeRateDate, setExchangeRateDate] = useState(new Date().toISOString().split('T')[0]);
   const [inlineMapping, setInlineMapping] = useState<InlineMapping>(INITIAL_MAPPING);
+  const [deletingStatementId, setDeletingStatementId] = useState<string | null>(null);
 
   const { data: accounts } = useFetch<BankAccount[]>('/api/bank-accounts');
   const { data: statements, refetch: refetchStatements } = useFetch<StatementHistory[]>('/api/bank/statements');
@@ -218,6 +219,29 @@ export default function BankStatementImportPage() {
 
     setProcessResult(data as ProcessResult);
     setStep('result');
+    await refetchStatements();
+  }
+
+  async function handleDeleteStatement(statement: StatementHistory) {
+    const filename = statement.filename ?? 'este extrato';
+    const confirmed = window.confirm(
+      `Excluir "${filename}"? Os movimentos importados por este arquivo tambem serao removidos.`
+    );
+    if (!confirmed) return;
+
+    setError('');
+    setDeletingStatementId(statement.id);
+
+    const response = await fetch(`/api/bank/statements/${statement.id}`, { method: 'DELETE' });
+    const data = await response.json().catch(() => ({}));
+
+    setDeletingStatementId(null);
+
+    if (!response.ok) {
+      setError(formatApiError(data));
+      return;
+    }
+
     await refetchStatements();
   }
 
@@ -567,7 +591,7 @@ export default function BankStatementImportPage() {
           <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Historico de importacoes</h2>
           <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
             <div className="overflow-x-auto">
-              <table className="min-w-[760px] w-full text-sm">
+              <table className="min-w-[820px] w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-400">Arquivo</th>
@@ -575,6 +599,7 @@ export default function BankStatementImportPage() {
                     <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-400">Periodo</th>
                     <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wide text-gray-400">Movimentos</th>
                     <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-400">Status</th>
+                    <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wide text-gray-400">Acoes</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -591,6 +616,22 @@ export default function BankStatementImportPage() {
                         <span className={`rounded px-2 py-0.5 text-xs font-medium ${statusClass(statement.status)}`}>
                           {statusLabel(statement.status)}
                         </span>
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        <button
+                          type="button"
+                          disabled={deletingStatementId === statement.id}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-300 transition hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
+                          onClick={() => void handleDeleteStatement(statement)}
+                          aria-label="Excluir extrato importado"
+                          title="Excluir extrato importado"
+                        >
+                          {deletingStatementId === statement.id ? (
+                            <RefreshCw className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </button>
                       </td>
                     </tr>
                   ))}
