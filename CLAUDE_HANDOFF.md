@@ -1,5 +1,86 @@
 # Handoff - CashFlowAI como projeto raiz
 
+## Atualizacao mais recente - Etapa 09 Fechamento Mensal 2026-06-27
+
+Solicitacao: implementar o prompt `cashflowai-etapa-09-prompt-codex.md`, manter o codigo validado e atualizar este handoff.
+
+Arquivos principais entregues:
+
+- `lib/periods/close.ts`
+- `lib/periods/close.test.ts`
+- `app/api/periods/route.ts`
+- `app/api/periods/[year]/[month]/pre-close-summary/route.ts`
+- `app/api/periods/[year]/[month]/close/route.ts`
+- `app/api/periods/[year]/[month]/reopen/route.ts`
+- `app/api/periods/[year]/[month]/lock/route.ts`
+- `app/api/periods/[year]/[month]/unlock/route.ts`
+- `components/periods/pre-close-modal.tsx`
+- `components/periods/reopen-modal.tsx`
+- `app/(app)/settings/periods/page.tsx`
+- `prisma/schema.prisma`
+- `supabase/migrations/008_accounting_period_notes.sql`
+
+Comportamento entregue:
+
+- `getPeriodDates()` calcula inicio/fim de mes de forma estavel para testes.
+- `getPreCloseSummary()` calcula DRE do periodo, DRE do mes anterior, resumo executivo, highlights, movimentos nao conciliados, lancamentos sem categoria e pendencias.
+- `closePeriod()` fecha periodo, gera snapshots JSON de DRE e Fluxo de Caixa, grava observacao opcional e cria `AuditLog` com o UUID real do `AccountingPeriod`.
+- `reopenPeriod()` reabre periodo fechado com justificativa obrigatoria e auditoria.
+- `lockPeriod()` bloqueia periodo fechado, apenas para `owner`.
+- `unlockPeriod()` desbloqueia periodo bloqueado para `closed`, apenas para `owner`, com justificativa e auditoria.
+- `GET /api/periods?limit=24` lista os ultimos periodos com status real ou `open` implicito e flags `canClose`, `canReopen`, `canLock`, `canUnlock` calculadas no servidor.
+- `/settings/periods` substitui o placeholder por uma tela operacional com tabela, status visual, botoes condicionais e modais de fechamento/reabertura/desbloqueio.
+- O modal de pre-fechamento exibe KPIs de DRE, highlights, warnings e pendencias antes de confirmar.
+- O modal de reabertura/desbloqueio exige justificativa minima de 20 caracteres.
+
+Adaptacoes importantes ao prompt:
+
+- O prompt citava `lib/transactions/period-guard.ts`, mas no repo atual a funcao `guardPeriod()` ja existe em `lib/transactions/domain.ts`.
+- As rotas `POST /api/transactions` e `PATCH /api/transactions/[id]` ja chamavam `guardPeriod()` antes desta etapa; nao foi criada duplicacao.
+- `AuditLog.entityId` e UUID no schema, entao as acoes de periodo usam `AccountingPeriod.id`, nao a string `YYYY-MM` sugerida no prompt.
+- `AccountingPeriod` ja tinha `reopenedById`, `reopenedAt` e `reopenReason`; foi adicionado apenas `notes` para observacao do fechamento.
+- Foi criada migration SQL idempotente `008_accounting_period_notes.sql` para adicionar `accounting_periods.notes` no Supabase.
+
+Verificacoes executadas na raiz:
+
+```bash
+npx prisma generate
+npm run typecheck
+npm run test
+npm run lint
+npm run build
+```
+
+Resultado:
+
+- Prisma generate: OK.
+- Typecheck: OK.
+- Testes: OK, 17 arquivos e 158 testes passando.
+- Lint: OK, sem warnings ou erros.
+- Build: OK, incluindo as novas rotas dinamicas de periodos e `/settings/periods`.
+
+Ainda nao executado:
+
+- Aplicacao da migration `supabase/migrations/008_accounting_period_notes.sql` no Supabase remoto/local compartilhado.
+- Teste manual autenticado em `/settings/periods`, porque depende de sessao real e dados da empresa.
+
+Pendencia operacional:
+
+```bash
+psql "$DIRECT_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/008_accounting_period_notes.sql
+```
+
+Depois disso, validar manualmente:
+
+1. Abrir `/settings/periods`.
+2. Fechar um periodo aberto e confirmar que o status muda para `Fechado`.
+3. Reabrir com justificativa de 20+ caracteres.
+4. Bloquear como `owner`.
+5. Desbloquear como `owner`.
+6. Tentar lancamento retroativo em periodo fechado/bloqueado para confirmar o comportamento de `guardPeriod()`.
+
+---
+
 ## Atualizacao mais recente - Etapa 08 Dashboard e Central Financeira 2026-06-27
 
 Solicitacao: implementar o prompt `cashflowai-etapa-08-prompt-codex.md` sem quebrar o codigo e atualizar este handoff.

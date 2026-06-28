@@ -462,6 +462,7 @@ model AccountingPeriod {
   reopenedAt       DateTime?              @map("reopened_at")
   reopenReason     String?                @map("reopen_reason")
   lockReason       String?                @map("lock_reason")
+  notes            String?
   dreSnapshot      Json?                  @map("dre_snapshot")
   cashflowSnapshot Json?                  @map("cashflow_snapshot")
   createdAt        DateTime               @default(now()) @map("created_at")
