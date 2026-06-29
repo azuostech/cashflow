@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, Search } from 'lucide-react';
+import { Check, ChevronDown, PlusCircle, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils/cn';
 
@@ -18,6 +18,8 @@ interface SearchableSelectProps {
   placeholder?: string;
   disabled?: boolean;
   allowEmpty?: boolean;
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
 export function SearchableSelect({
@@ -26,7 +28,9 @@ export function SearchableSelect({
   onChange,
   placeholder = 'Buscar...',
   disabled,
-  allowEmpty = true
+  allowEmpty = true,
+  actionLabel = 'Adicionar novo',
+  onAction
 }: SearchableSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -119,6 +123,22 @@ export function SearchableSelect({
             ))}
             {filtered.length === 0 ? <li className="px-3 py-2 text-sm text-gray-400">Nenhum resultado</li> : null}
           </ul>
+          {onAction ? (
+            <div className="border-t border-gray-100 p-1">
+              <button
+                type="button"
+                className="flex h-9 w-full items-center justify-center gap-2 rounded-sm text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+                onClick={() => {
+                  setSearch('');
+                  setOpen(false);
+                  onAction();
+                }}
+              >
+                <PlusCircle className="h-4 w-4" />
+                {actionLabel}
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

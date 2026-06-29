@@ -9,13 +9,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { FormField } from '@/components/shared/form-field';
+import { Modal } from '@/components/shared/modal';
 import { SearchableSelect } from '@/components/shared/searchable-select';
 import { useFetch } from '@/hooks/use-fetch';
 import { generateInstallmentPreviews, isCategoryCompatible } from '@/lib/transactions';
 import { formatCurrency } from '@/lib/utils/currency';
+import { createCategorySchema, createCostCenterSchema } from '@/lib/validations/settings.schema';
 import { createTransactionSchema, type CreateTransactionInput } from '@/lib/validations/transaction.schema';
 
 type TransactionFormValues = z.input<typeof createTransactionSchema>;
+type TransactionTypeValue = 'revenue' | 'expense' | 'transfer';
+type QuickCategoryType = Exclude<TransactionTypeValue, 'transfer'>;
 
 interface Category {
   id: string;
@@ -28,7 +32,17 @@ interface Category {
 interface CostCenter {
   id: string;
   name: string;
+  code?: string | null;
+  parentId?: string | null;
   active: boolean;
+}
+
+interface DRENode {
+  id: string;
+  name: string;
+  code: string;
+  sign: number;
+  type: string;
 }
 
 interface BankAccount {
@@ -68,6 +82,20 @@ const FREQUENCY_LABELS = [
   { value: 'annual', label: 'Anual' }
 ];
 
+const QUICK_CASHFLOW_GROUPS = [
+  { value: 'operating_inflow', label: 'Entrada Operacional', type: 'revenue' },
+  { value: 'investing_inflow', label: 'Entrada Investimento', type: 'revenue' },
+  { value: 'financing_inflow', label: 'Entrada Financiamento', type: 'revenue' },
+  { value: 'operating_outflow', label: 'Saida Operacional', type: 'expense' },
+  { value: 'investing_outflow', label: 'Saida Investimento', type: 'expense' },
+  { value: 'financing_outflow', label: 'Saida Financiamento', type: 'expense' }
+] as const;
+
+const QUICK_CATEGORY_COLOR: Record<QuickCategoryType, string> = {
+  revenue: '#10b981',
+  expense: '#ef4444'
+};
+
 function todayDate() {
   return new Date().toISOString().split('T')[0];
 }
@@ -81,9 +109,9 @@ function optionalNumber(value: unknown) {
   return value === '' || value === null || value === undefined ? null : Number(value);
 }
 
-function extractApiError(payload: unknown): string {
+function extractApiError(payload: unknown, fallback = 'Erro ao salvar lancamento'): string {
   if (typeof payload === 'string') return payload;
-  if (!payload || typeof payload !== 'object') return 'Erro ao salvar lancamento';
+  if (!payload || typeof payload !== 'object') return fallback;
 
   const error = (payload as { error?: unknown }).error;
   if (typeof error === 'string') return error;
@@ -95,7 +123,21 @@ function extractApiError(payload: unknown): string {
     if (first) return first;
   }
 
-  return 'Erro ao salvar lancamento';
+  return fallback;
+}
+
+async function readJson(response: Response) {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+function getCreatedId(payload: unknown) {
+  if (!payload || typeof payload !== 'object') return null;
+  const id = (payload as { id?: unknown }).id;
+  return typeof id === 'string' ? id : null;
 }
 
 export function TransactionForm({ initialData, companyBaseCurrency, onSave, onCancel }: TransactionFormProps) {
@@ -104,10 +146,13 @@ export function TransactionForm({ initialData, companyBaseCurrency, onSave, onCa
   const [showExtras, setShowExtras] = useState(false);
   const [showInstallment, setShowInstallment] = useState(false);
   const [showRecurrence, setShowRecurrence] = useState(false);
+  const [quickCategoryOpen, setQuickCategoryOpen] = useState(false);
+  const [quickCostCenterOpen, setQuickCostCenterOpen] = useState(false);
   const today = todayDate();
 
-  const { data: categories } = useFetch<Category[]>('/api/categories?includeDeprecated=true');
-  const { data: costCenters } = useFetch<CostCenter[]>('/api/cost-centers?active=all');
+  const { data: categories, refetch: refetchCategories } = useFetch<Category[]>('/api/categories?includeDeprecated=true');
+  const { data: costCenters, refetch: refetchCostCenters } = useFetch<CostCenter[]>('/api/cost-centers?active=all');
+  const { data: dreNodes } = useFetch<DRENode[]>('/api/dre-nodes?includeSubtotals=false');
   const { data: accounts } = useFetch<BankAccount[]>('/api/bank-accounts?active=all');
   const { data: contacts } = useFetch<Contact[]>('/api/contacts?active=all');
 
@@ -212,15 +257,58 @@ export function TransactionForm({ initialData, companyBaseCurrency, onSave, onCa
     label: category.name,
     meta: category.dreNode?.name
   }));
-  const costCenterOptions = (costCenters ?? [])
-    .filter((costCenter) => costCenter.active)
-    .map((costCenter) => ({ value: costCenter.id, label: costCenter.name }));
+  const activeCostCenters = (costCenters ?? []).filter((costCenter) => costCenter.active);
+  const costCenterOptions = activeCostCenters.map((costCenter) => ({ value: costCenter.id, label: costCenter.name }));
   const accountOptions = (accounts ?? [])
     .filter((account) => account.active)
     .map((account) => ({ value: account.id, label: account.name, meta: account.currency }));
   const contactOptions = (contacts ?? [])
     .filter((contact) => contact.active)
     .map((contact) => ({ value: contact.id, label: contact.name, meta: contact.type }));
+
+  async function saveQuickCategory(data: Record<string, unknown>) {
+    const response = await fetch('/api/categories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    const result = await readJson(response);
+
+    if (!response.ok) {
+      throw new Error(extractApiError(result, 'Erro ao salvar categoria.'));
+    }
+
+    const createdId = getCreatedId(result);
+    await refetchCategories();
+
+    if (createdId) {
+      setValue('categoryId', createdId, { shouldDirty: true, shouldValidate: true });
+    }
+
+    setQuickCategoryOpen(false);
+  }
+
+  async function saveQuickCostCenter(data: Record<string, unknown>) {
+    const response = await fetch('/api/cost-centers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    const result = await readJson(response);
+
+    if (!response.ok) {
+      throw new Error(extractApiError(result, 'Erro ao salvar centro de custo.'));
+    }
+
+    const createdId = getCreatedId(result);
+    await refetchCostCenters();
+
+    if (createdId) {
+      setValue('costCenterId', createdId, { shouldDirty: true, shouldValidate: true });
+    }
+
+    setQuickCostCenterOpen(false);
+  }
 
   async function onSubmit(data: CreateTransactionInput) {
     setServerError('');
@@ -284,7 +372,7 @@ export function TransactionForm({ initialData, companyBaseCurrency, onSave, onCa
     }
   }
 
-  function changeType(type: 'revenue' | 'expense' | 'transfer') {
+  function changeType(type: TransactionTypeValue) {
     if (initialData) return;
     setValue('type', type);
     setValue('categoryId', null);
@@ -294,7 +382,8 @@ export function TransactionForm({ initialData, companyBaseCurrency, onSave, onCa
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div className="grid grid-cols-3 overflow-hidden rounded-md border border-gray-200">
         {(['revenue', 'expense', 'transfer'] as const).map((type) => (
           <button
@@ -368,6 +457,7 @@ export function TransactionForm({ initialData, companyBaseCurrency, onSave, onCa
               onChange={(value) => setValue('categoryId', value || null)}
               placeholder="Buscar categoria"
               allowEmpty={false}
+              onAction={() => setQuickCategoryOpen(true)}
             />
           </FormField>
           <FormField id="costCenterId" label="Centro de custo" error={errors.costCenterId?.message} required>
@@ -377,6 +467,7 @@ export function TransactionForm({ initialData, companyBaseCurrency, onSave, onCa
               onChange={(value) => setValue('costCenterId', value || null)}
               placeholder="Buscar centro"
               allowEmpty={false}
+              onAction={() => setQuickCostCenterOpen(true)}
             />
           </FormField>
         </div>
@@ -572,6 +663,219 @@ export function TransactionForm({ initialData, companyBaseCurrency, onSave, onCa
         </Button>
         <Button type="submit" disabled={loading}>
           {loading ? 'Salvando...' : initialData ? 'Salvar alteracoes' : 'Salvar lancamento'}
+        </Button>
+      </div>
+      </form>
+
+      <Modal open={quickCategoryOpen} onClose={() => setQuickCategoryOpen(false)} title="Nova categoria">
+        <QuickCategoryForm
+          key={watchedType}
+          transactionType={watchedType === 'revenue' ? 'revenue' : 'expense'}
+          dreNodes={dreNodes ?? []}
+          onCancel={() => setQuickCategoryOpen(false)}
+          onSave={saveQuickCategory}
+        />
+      </Modal>
+
+      <Modal open={quickCostCenterOpen} onClose={() => setQuickCostCenterOpen(false)} title="Novo centro de custo">
+        <QuickCostCenterForm
+          costCenters={activeCostCenters}
+          onCancel={() => setQuickCostCenterOpen(false)}
+          onSave={saveQuickCostCenter}
+        />
+      </Modal>
+    </>
+  );
+}
+
+function QuickCategoryForm({
+  transactionType,
+  dreNodes,
+  onSave,
+  onCancel
+}: {
+  transactionType: QuickCategoryType;
+  dreNodes: DRENode[];
+  onSave: (data: Record<string, unknown>) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const availableDreNodes = useMemo(() => dreNodes.filter((node) => (transactionType === 'revenue' ? node.sign > 0 : node.sign < 0)), [dreNodes, transactionType]);
+  const cashflowGroups = QUICK_CASHFLOW_GROUPS.filter((group) => group.type === transactionType);
+  const defaultDreNodeId = availableDreNodes[0]?.id ?? '';
+  const defaultCashflowGroup = cashflowGroups[0]?.value ?? (transactionType === 'revenue' ? 'operating_inflow' : 'operating_outflow');
+
+  const { register, handleSubmit, setValue, watch } = useForm<Record<string, string>>({
+    defaultValues: {
+      name: '',
+      dreNodeId: defaultDreNodeId,
+      cashflowGroup: defaultCashflowGroup,
+      color: QUICK_CATEGORY_COLOR[transactionType]
+    }
+  });
+
+  const selectedDreNodeId = watch('dreNodeId');
+
+  useEffect(() => {
+    if (!selectedDreNodeId && defaultDreNodeId) {
+      setValue('dreNodeId', defaultDreNodeId);
+    }
+  }, [defaultDreNodeId, selectedDreNodeId, setValue]);
+
+  async function onSubmit(values: Record<string, string>) {
+    if (!availableDreNodes.some((node) => node.id === values.dreNodeId)) {
+      setError('Selecione uma linha DRE valida.');
+      return;
+    }
+
+    const parsed = createCategorySchema.safeParse({
+      name: values.name,
+      type: transactionType,
+      dreNodeId: values.dreNodeId,
+      cashflowGroup: values.cashflowGroup || defaultCashflowGroup,
+      parentId: null,
+      color: values.color || QUICK_CATEGORY_COLOR[transactionType],
+      icon: null
+    });
+
+    if (!parsed.success) {
+      setError('Revise os campos antes de salvar.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      await onSave(parsed.data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao salvar categoria.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      {error ? <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
+
+      <FormField id="quick-cat-name" label="Nome" required>
+        <Input id="quick-cat-name" placeholder={transactionType === 'revenue' ? 'Ex: Receita de Servicos' : 'Ex: Software e Api'} {...register('name')} />
+      </FormField>
+
+      <FormField id="quick-cat-dre-node" label="Linha DRE" required>
+        <Select id="quick-cat-dre-node" disabled={availableDreNodes.length === 0} {...register('dreNodeId')}>
+          {availableDreNodes.map((node) => (
+            <option key={node.id} value={node.id}>
+              {node.code} - {node.name}
+            </option>
+          ))}
+        </Select>
+      </FormField>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <FormField id="quick-cat-cashflow" label="Grupo no fluxo" required>
+          <Select id="quick-cat-cashflow" {...register('cashflowGroup')}>
+            {cashflowGroups.map((group) => (
+              <option key={group.value} value={group.value}>
+                {group.label}
+              </option>
+            ))}
+          </Select>
+        </FormField>
+        <FormField id="quick-cat-color" label="Cor">
+          <Input id="quick-cat-color" type="color" className="h-10" {...register('color')} />
+        </FormField>
+      </div>
+
+      {availableDreNodes.length === 0 ? <p className="text-sm text-gray-500">Nenhuma linha DRE disponivel para este tipo.</p> : null}
+
+      <div className="flex justify-end gap-3 pt-2">
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancelar
+        </Button>
+        <Button type="submit" disabled={loading || availableDreNodes.length === 0}>
+          {loading ? 'Criando...' : 'Criar categoria'}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function QuickCostCenterForm({
+  costCenters,
+  onSave,
+  onCancel
+}: {
+  costCenters: CostCenter[];
+  onSave: (data: Record<string, unknown>) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const { register, handleSubmit } = useForm<Record<string, string>>({
+    defaultValues: {
+      name: '',
+      code: '',
+      parentId: ''
+    }
+  });
+
+  async function onSubmit(values: Record<string, string>) {
+    const parsed = createCostCenterSchema.safeParse({
+      name: values.name,
+      code: values.code || null,
+      parentId: values.parentId || null
+    });
+
+    if (!parsed.success) {
+      setError('Revise os campos antes de salvar.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      await onSave(parsed.data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao salvar centro de custo.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      {error ? <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
+
+      <FormField id="quick-cc-name" label="Nome" required>
+        <Input id="quick-cc-name" placeholder="Ex: Comercial" {...register('name')} />
+      </FormField>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <FormField id="quick-cc-code" label="Codigo">
+          <Input id="quick-cc-code" placeholder="Ex: CC001" {...register('code')} />
+        </FormField>
+        <FormField id="quick-cc-parent" label="Centro de custo pai">
+          <Select id="quick-cc-parent" {...register('parentId')}>
+            <option value="">Sem pai</option>
+            {costCenters.map((costCenter) => (
+              <option key={costCenter.id} value={costCenter.id}>
+                {costCenter.name}
+              </option>
+            ))}
+          </Select>
+        </FormField>
+      </div>
+
+      <div className="flex justify-end gap-3 pt-2">
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancelar
+        </Button>
+        <Button type="submit" disabled={loading}>
+          {loading ? 'Criando...' : 'Criar centro'}
         </Button>
       </div>
     </form>
