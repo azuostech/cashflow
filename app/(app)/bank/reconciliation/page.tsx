@@ -8,6 +8,8 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { FormField } from '@/components/shared/form-field';
 import { Modal } from '@/components/shared/modal';
 import { QuickCategoryForm, type DRENodeOption } from '@/components/shared/quick-category-form';
+import { QuickContactForm } from '@/components/shared/quick-contact-form';
+import { QuickCostCenterForm } from '@/components/shared/quick-cost-center-form';
 import { SearchableSelect } from '@/components/shared/searchable-select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -77,6 +79,7 @@ interface CostCenterOption {
 interface ContactOption {
   id: string;
   name: string;
+  type?: string;
   active: boolean;
 }
 
@@ -404,15 +407,24 @@ function CreateFromMoveModal({
   const [contactId, setContactId] = useState('');
   const [competenceDate, setCompetenceDate] = useState(move.date.slice(0, 10));
   const [quickCategoryOpen, setQuickCategoryOpen] = useState(false);
+  const [quickCostCenterOpen, setQuickCostCenterOpen] = useState(false);
+  const [quickContactOpen, setQuickContactOpen] = useState(false);
   const categoryType = move.type === 'credit' ? 'revenue' : 'expense';
+  const defaultContactType = move.type === 'credit' ? 'customer' : 'supplier';
 
   const { data: categories, refetch: refetchCategories } = useFetch<CategoryOption[]>(`/api/categories?type=${categoryType}`);
   const { data: dreNodes } = useFetch<DRENodeOption[]>('/api/dre-nodes?includeSubtotals=false');
-  const { data: costCenters } = useFetch<CostCenterOption[]>('/api/cost-centers');
-  const { data: contacts } = useFetch<ContactOption[]>('/api/contacts');
+  const { data: costCenters, refetch: refetchCostCenters } = useFetch<CostCenterOption[]>('/api/cost-centers');
+  const { data: contacts, refetch: refetchContacts } = useFetch<ContactOption[]>('/api/contacts');
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setQuickCategoryOpen(false);
+      setQuickCostCenterOpen(false);
+      setQuickContactOpen(false);
+      return;
+    }
+
     setError('');
     setDescription(move.merchantName ?? move.description);
     setCategoryId('');
@@ -420,6 +432,8 @@ function CreateFromMoveModal({
     setContactId('');
     setCompetenceDate(move.date.slice(0, 10));
     setQuickCategoryOpen(false);
+    setQuickCostCenterOpen(false);
+    setQuickContactOpen(false);
   }, [move, open]);
 
   async function saveQuickCategory(data: Record<string, unknown>) {
@@ -442,6 +456,50 @@ function CreateFromMoveModal({
     }
 
     setQuickCategoryOpen(false);
+  }
+
+  async function saveQuickCostCenter(data: Record<string, unknown>) {
+    const response = await fetch('/api/cost-centers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    const payload = await readJson(response);
+
+    if (!response.ok) {
+      throw new Error(readApiError(payload, 'Erro ao salvar centro de custo.'));
+    }
+
+    const createdId = getCreatedId(payload);
+    await refetchCostCenters();
+
+    if (createdId) {
+      setCostCenterId(createdId);
+    }
+
+    setQuickCostCenterOpen(false);
+  }
+
+  async function saveQuickContact(data: Record<string, unknown>) {
+    const response = await fetch('/api/contacts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    const payload = await readJson(response);
+
+    if (!response.ok) {
+      throw new Error(readApiError(payload, 'Erro ao salvar contato.'));
+    }
+
+    const createdId = getCreatedId(payload);
+    await refetchContacts();
+
+    if (createdId) {
+      setContactId(createdId);
+    }
+
+    setQuickContactOpen(false);
   }
 
   async function handleCreate() {
@@ -483,12 +541,11 @@ function CreateFromMoveModal({
   const categoryOptions = (categories ?? [])
     .filter((category) => !category.deprecatedAt)
     .map((category) => ({ value: category.id, label: category.name, meta: category.dreNode?.name }));
-  const costCenterOptions = (costCenters ?? [])
-    .filter((costCenter) => costCenter.active)
-    .map((costCenter) => ({ value: costCenter.id, label: costCenter.name }));
+  const activeCostCenters = (costCenters ?? []).filter((costCenter) => costCenter.active);
+  const costCenterOptions = activeCostCenters.map((costCenter) => ({ value: costCenter.id, label: costCenter.name }));
   const contactOptions = (contacts ?? [])
     .filter((contact) => contact.active)
-    .map((contact) => ({ value: contact.id, label: contact.name }));
+    .map((contact) => ({ value: contact.id, label: contact.name, meta: contact.type }));
 
   return (
     <>
@@ -537,11 +594,20 @@ function CreateFromMoveModal({
               onChange={setCostCenterId}
               placeholder="Buscar centro de custo"
               allowEmpty={false}
+              actionLabel="Adicionar centro de custo"
+              onAction={() => setQuickCostCenterOpen(true)}
             />
           </FormField>
 
           <FormField id="contact" label="Contato">
-            <SearchableSelect options={contactOptions} value={contactId} onChange={setContactId} placeholder="Buscar contato" />
+            <SearchableSelect
+              options={contactOptions}
+              value={contactId}
+              onChange={setContactId}
+              placeholder="Buscar contato"
+              actionLabel="Adicionar contato"
+              onAction={() => setQuickContactOpen(true)}
+            />
           </FormField>
 
           {error ? <div className="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div> : null}
@@ -564,6 +630,24 @@ function CreateFromMoveModal({
           dreNodes={dreNodes ?? []}
           onCancel={() => setQuickCategoryOpen(false)}
           onSave={saveQuickCategory}
+        />
+      </Modal>
+
+      <Modal open={quickCostCenterOpen} onClose={() => setQuickCostCenterOpen(false)} title="Novo centro de custo">
+        <QuickCostCenterForm
+          costCenters={activeCostCenters}
+          onCancel={() => setQuickCostCenterOpen(false)}
+          onSave={saveQuickCostCenter}
+        />
+      </Modal>
+
+      <Modal open={quickContactOpen} onClose={() => setQuickContactOpen(false)} title="Novo contato">
+        <QuickContactForm
+          key={`${move.id}-${defaultContactType}`}
+          defaultName={move.merchantName ?? ''}
+          defaultType={defaultContactType}
+          onCancel={() => setQuickContactOpen(false)}
+          onSave={saveQuickContact}
         />
       </Modal>
     </>
