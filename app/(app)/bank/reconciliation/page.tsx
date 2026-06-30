@@ -7,6 +7,7 @@ import { SuggestionCard } from '@/components/bank/suggestion-card';
 import { EmptyState } from '@/components/shared/empty-state';
 import { FormField } from '@/components/shared/form-field';
 import { Modal } from '@/components/shared/modal';
+import { QuickCategoryForm, type DRENodeOption } from '@/components/shared/quick-category-form';
 import { SearchableSelect } from '@/components/shared/searchable-select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -64,6 +65,7 @@ interface CategoryOption {
   name: string;
   type: string;
   deprecatedAt?: string | null;
+  dreNode?: { name: string } | null;
 }
 
 interface CostCenterOption {
@@ -81,14 +83,32 @@ interface ContactOption {
 const ALL_ACCOUNTS = '__all__';
 
 function readApiError(payload: unknown, fallback: string): string {
+  if (typeof payload === 'string') return payload;
   if (!payload || typeof payload !== 'object') return fallback;
   const error = (payload as { error?: unknown }).error;
   if (typeof error === 'string') return error;
   if (error && typeof error === 'object') {
     const formErrors = (error as { formErrors?: string[] }).formErrors;
     if (Array.isArray(formErrors) && formErrors[0]) return formErrors[0];
+    const fieldErrors = (error as { fieldErrors?: Record<string, string[]> }).fieldErrors;
+    const first = fieldErrors ? Object.values(fieldErrors).flat()[0] : null;
+    if (first) return first;
   }
   return fallback;
+}
+
+async function readJson(response: Response) {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+function getCreatedId(payload: unknown) {
+  if (!payload || typeof payload !== 'object') return null;
+  const id = (payload as { id?: unknown }).id;
+  return typeof id === 'string' ? id : null;
 }
 
 function summaryCount(summary: MovesResponse['summary'], status: string): number {
@@ -383,9 +403,11 @@ function CreateFromMoveModal({
   const [costCenterId, setCostCenterId] = useState('');
   const [contactId, setContactId] = useState('');
   const [competenceDate, setCompetenceDate] = useState(move.date.slice(0, 10));
+  const [quickCategoryOpen, setQuickCategoryOpen] = useState(false);
   const categoryType = move.type === 'credit' ? 'revenue' : 'expense';
 
-  const { data: categories } = useFetch<CategoryOption[]>(`/api/categories?type=${categoryType}`);
+  const { data: categories, refetch: refetchCategories } = useFetch<CategoryOption[]>(`/api/categories?type=${categoryType}`);
+  const { data: dreNodes } = useFetch<DRENodeOption[]>('/api/dre-nodes?includeSubtotals=false');
   const { data: costCenters } = useFetch<CostCenterOption[]>('/api/cost-centers');
   const { data: contacts } = useFetch<ContactOption[]>('/api/contacts');
 
@@ -397,7 +419,30 @@ function CreateFromMoveModal({
     setCostCenterId('');
     setContactId('');
     setCompetenceDate(move.date.slice(0, 10));
+    setQuickCategoryOpen(false);
   }, [move, open]);
+
+  async function saveQuickCategory(data: Record<string, unknown>) {
+    const response = await fetch('/api/categories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    const payload = await readJson(response);
+
+    if (!response.ok) {
+      throw new Error(readApiError(payload, 'Erro ao salvar categoria.'));
+    }
+
+    const createdId = getCreatedId(payload);
+    await refetchCategories();
+
+    if (createdId) {
+      setCategoryId(createdId);
+    }
+
+    setQuickCategoryOpen(false);
+  }
 
   async function handleCreate() {
     if (!categoryId || !costCenterId) {
@@ -437,7 +482,7 @@ function CreateFromMoveModal({
 
   const categoryOptions = (categories ?? [])
     .filter((category) => !category.deprecatedAt)
-    .map((category) => ({ value: category.id, label: category.name }));
+    .map((category) => ({ value: category.id, label: category.name, meta: category.dreNode?.name }));
   const costCenterOptions = (costCenters ?? [])
     .filter((costCenter) => costCenter.active)
     .map((costCenter) => ({ value: costCenter.id, label: costCenter.name }));
@@ -446,67 +491,81 @@ function CreateFromMoveModal({
     .map((contact) => ({ value: contact.id, label: contact.name }));
 
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="Criar lancamento"
-      description={`Movimento: ${move.description}`}
-      size="md"
-    >
-      <div className="space-y-4">
-        <div className="rounded-md bg-gray-50 px-4 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-sm text-gray-600">{formatDate(move.date)}</span>
-            <span className={move.type === 'credit' ? 'text-base font-semibold text-emerald-600' : 'text-base font-semibold text-red-600'}>
-              {move.type === 'credit' ? '+' : '-'}
-              {formatCurrency(Number(move.originalAmount), move.originalCurrency)}
-            </span>
+    <>
+      <Modal
+        open={open}
+        onClose={onClose}
+        title="Criar lancamento"
+        description={`Movimento: ${move.description}`}
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="rounded-md bg-gray-50 px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm text-gray-600">{formatDate(move.date)}</span>
+              <span className={move.type === 'credit' ? 'text-base font-semibold text-emerald-600' : 'text-base font-semibold text-red-600'}>
+                {move.type === 'credit' ? '+' : '-'}
+                {formatCurrency(Number(move.originalAmount), move.originalCurrency)}
+              </span>
+            </div>
+          </div>
+
+          <FormField id="description" label="Descricao" required>
+            <Input id="description" value={description} onChange={(event) => setDescription(event.target.value)} />
+          </FormField>
+
+          <FormField id="competenceDate" label="Data de competencia" required>
+            <Input id="competenceDate" type="date" value={competenceDate} onChange={(event) => setCompetenceDate(event.target.value)} />
+          </FormField>
+
+          <FormField id="category" label="Categoria" required>
+            <SearchableSelect
+              options={categoryOptions}
+              value={categoryId}
+              onChange={setCategoryId}
+              placeholder={`Buscar categoria de ${move.type === 'credit' ? 'receita' : 'despesa'}`}
+              allowEmpty={false}
+              actionLabel="Adicionar categoria"
+              onAction={() => setQuickCategoryOpen(true)}
+            />
+          </FormField>
+
+          <FormField id="costCenter" label="Centro de custo" required>
+            <SearchableSelect
+              options={costCenterOptions}
+              value={costCenterId}
+              onChange={setCostCenterId}
+              placeholder="Buscar centro de custo"
+              allowEmpty={false}
+            />
+          </FormField>
+
+          <FormField id="contact" label="Contato">
+            <SearchableSelect options={contactOptions} value={contactId} onChange={setContactId} placeholder="Buscar contato" />
+          </FormField>
+
+          {error ? <div className="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div> : null}
+
+          <div className="flex justify-end gap-3 pt-1">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button type="button" disabled={loading || !categoryId || !costCenterId} onClick={() => void handleCreate()}>
+              {loading ? 'Criando...' : 'Criar e conciliar'}
+            </Button>
           </div>
         </div>
+      </Modal>
 
-        <FormField id="description" label="Descricao" required>
-          <Input id="description" value={description} onChange={(event) => setDescription(event.target.value)} />
-        </FormField>
-
-        <FormField id="competenceDate" label="Data de competencia" required>
-          <Input id="competenceDate" type="date" value={competenceDate} onChange={(event) => setCompetenceDate(event.target.value)} />
-        </FormField>
-
-        <FormField id="category" label="Categoria" required>
-          <SearchableSelect
-            options={categoryOptions}
-            value={categoryId}
-            onChange={setCategoryId}
-            placeholder={`Buscar categoria de ${move.type === 'credit' ? 'receita' : 'despesa'}`}
-            allowEmpty={false}
-          />
-        </FormField>
-
-        <FormField id="costCenter" label="Centro de custo" required>
-          <SearchableSelect
-            options={costCenterOptions}
-            value={costCenterId}
-            onChange={setCostCenterId}
-            placeholder="Buscar centro de custo"
-            allowEmpty={false}
-          />
-        </FormField>
-
-        <FormField id="contact" label="Contato">
-          <SearchableSelect options={contactOptions} value={contactId} onChange={setContactId} placeholder="Buscar contato" />
-        </FormField>
-
-        {error ? <div className="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div> : null}
-
-        <div className="flex justify-end gap-3 pt-1">
-          <Button type="button" variant="outline" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button type="button" disabled={loading || !categoryId || !costCenterId} onClick={() => void handleCreate()}>
-            {loading ? 'Criando...' : 'Criar e conciliar'}
-          </Button>
-        </div>
-      </div>
-    </Modal>
+      <Modal open={quickCategoryOpen} onClose={() => setQuickCategoryOpen(false)} title="Nova categoria">
+        <QuickCategoryForm
+          key={categoryType}
+          transactionType={categoryType}
+          dreNodes={dreNodes ?? []}
+          onCancel={() => setQuickCategoryOpen(false)}
+          onSave={saveQuickCategory}
+        />
+      </Modal>
+    </>
   );
 }
